@@ -1,10 +1,10 @@
-module.exports = interaction => {
+const { SlashCommandBuilder } = require('@discordjs/builders');
 
-    interaction.reply({
-        embed: [{
-            "title":"Mommers Co | Ping",
-            "desctipion": `Poing!`
-        }],
-        ephemeral: true
-    })
-}
+module.exports = {
+	data: new SlashCommandBuilder()
+		.setName('ping')
+		.setDescription('Replies with Pong!'),
+	async execute(interaction) {
+		await interaction.reply('Pong!');
+	},
+};
