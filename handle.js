@@ -1,16 +1,15 @@
 var Process, Discord
 const Spawn = require('child_process').spawn
-
-const { guildId, token } = require('./config.json');
+const config = require('./config.json');
 
 const { Client, Intents } = require('discord.js')
 var selectedIntents = []
 for (intent in Intents.FLAGS) { selectedIntents.push(Intents.FLAGS[intent]) }
 const client = new Client({ intents: selectedIntents })
-client.login(token)
+client.login(config.token)
 client.on('ready', () => {
     console.log(`Handle Logged in as ${client.user.tag}!`)
-    Discord = client.guilds.cache.get(guildId).channels.cache.find(channel => channel.name === 'discord-console')
+    Discord = client.guilds.cache.get(config.guildId).channels.cache.find(channel => channel.name === 'discord-console')
     Start()
 })
 

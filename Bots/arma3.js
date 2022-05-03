@@ -14,8 +14,6 @@ function Start(token, game) {
 
         function refresh() {
 
-            process.data.games[game] = status
-
             Gamedig.query({
                 type: 'arma3',
                 host: '139.99.131.163',
@@ -40,10 +38,6 @@ function Start(token, game) {
 
         }
         setInterval(refresh, 10000)
-
-        process.app.get(`/game/${game}`, (req, res) => {
-            res.send(status)
-        })
 
     })
 }

@@ -1,3 +1,5 @@
 node_modules
 .env
+.env.discord
+.env.games
 config.json
