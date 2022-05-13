@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon handle.js"
   },
   "repository": {
     "type": "git",
@@ -23,7 +24,8 @@
     "discord-api-types": "^0.32.0",
     "discord.js": "^13.6.0",
     "dotenv": "^16.0.0",
-    "gamedig": "^4.0.4"
+    "gamedig": "^4.0.4",
+    "nodemon": "^2.0.16"
   },
   "devDependencies": {
     "eslint": "^8.14.0"

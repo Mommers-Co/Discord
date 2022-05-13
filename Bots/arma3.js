@@ -8,11 +8,13 @@ function Start(token, game) {
     client.login(token)
 
     client.on('ready', async () => {
-        console.log(`Logged in as ${client.user.tag}!`);
+        console.log(`Arma 3 Logged in as ${client.user.tag}!`);
         client.user.setActivity(`Collecting Data...`, { type: 'WATCHING' })
         client.user.setStatus('idle')
 
         function refresh() {
+
+            process.data.games[game] = status
 
             Gamedig.query({
                 type: 'arma3',
@@ -38,7 +40,7 @@ function Start(token, game) {
 
         }
         setInterval(refresh, 10000)
-
+        
     })
 }
 

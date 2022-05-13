@@ -1,8 +1,15 @@
 const fs = require(`node:fs`);
-const { Client, Collection, Intents } = require('discord.js');
 process.env = require('./config.json');
+process.data = {
+	games: {}
+}
 
-const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
+const { Client, Collection, Intents } = require('discord.js')
+var selectedIntents = []
+for (intent in Intents.FLAGS) { selectedIntents.push(Intents.FLAGS[intent]) }
+const client = new Client({ intents: selectedIntents })
+client.login(process.env.discord.token)
+process.client = client
 
 for (game in process.env.games) {
     if (process.env.games[game]) require(`./Bots/${game}.js`).Start(process.env.games[game], game)
@@ -10,18 +17,11 @@ for (game in process.env.games) {
 
 client.once('ready', () => {
     async function Update() {
-    client.user.setActivity(`${client.guilds.cache.get(process.env.guildId).memberCount} Members`, {type: "WATCHING"})
+    client.user.setActivity(`${client.guilds.cache.get(process.env.discord.guildId).memberCount} Members`, {type: "WATCHING"})
     }
     setInterval(Update, 1000 * 60), Update()
 });
-/*
-client.commands = new Collection();
-    const commandFiles = fs.readdirSync(`./commands/SlashCommands/`).filter(file => file.endsWith('.js'));
-    for (const file of commandFiles) {
-        const command = require(`./commands/SlashCommands/${file}`);
-        client.commands.set(command.data.name, command);
-    }
-*/
+
 const eventFiles = fs.readdirSync('./events').filter(file => file.endsWith('.js'));
 
 for (const file of eventFiles) {
@@ -36,7 +36,7 @@ for (const file of eventFiles) {
 client.on('interactionCreate', async interaction => {
 	if (!interaction.isCommand()) return;
 
-	const command = client.commands.get(interaction.commandName);
+	const command = client.commands.get(interaction.command.data.name);
 
 	if (!command) return;
 
@@ -47,5 +47,3 @@ client.on('interactionCreate', async interaction => {
 		await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
 	}
 });
-
-client.login(process.env.token);
