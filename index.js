@@ -22,6 +22,15 @@ client.once('ready', () => {
     setInterval(Update, 1000 * 60), Update()
 });
 
+/*
+module.exports = client;
+
+const logs = require('discord-logs');
+logs(client, {
+    debug: true
+});
+*/
+
 const eventFiles = fs.readdirSync('./events').filter(file => file.endsWith('.js'));
 
 for (const file of eventFiles) {
@@ -47,3 +56,24 @@ client.on('interactionCreate', async interaction => {
 		await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
 	}
 });
+
+/*
+client.on('messageDelete', async message => {	
+	if (!message.guild) return;
+		const fetchedLogs = await message.guild.fetchAuditLogs({
+			limit: 1,
+			type: 'MESSAGE_DELETE',
+		});
+	
+		const deletionLog = fetchedLogs.entries.first();
+	
+		if (!deletionLog) return console.log(`A message by ${message.author.tag} was deleted, but no relevant audit logs were found.`);
+	
+		const { executor, target } = deletionLog;
+		if (target.id === message.author.id) {
+			console.log(`Message ${message.author.tag} was deleted by ${executor.tag}.`);
+			} else {
+				console.log(`Message by ${message.author.tag} was deleted, but unknown.`);
+		}
+	});
+*/

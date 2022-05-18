@@ -9,7 +9,7 @@ const client = new Client({ intents: selectedIntents })
 client.login(config.discord.token)
 client.on('ready', () => {
     console.log(`Handle Logged in as ${client.user.tag}!`)
-    Discord = client.guilds.cache.get(config.discord.guildId).channels.cache.find(channel => channel.name === 'discord-console')
+    Discord = client.guilds.cache.get(config.discord.guildId).channels.cache.get(config.discord.consoleId)
     Start()
 })
 

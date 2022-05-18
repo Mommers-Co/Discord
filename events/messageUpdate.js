@@ -1,4 +1,6 @@
 const { MessageEmbed } = require('discord.js');
+const client = require('../index');
+process.env = require('../config.json');
 
 module.exports = {
     name: "messageUpdate",
@@ -10,19 +12,19 @@ module.exports = {
         const After = newMessage.content.slice("0", count) + (newMessage.content.length > count? " ...":"");
 
         const logEmbed = new MessageEmbed()
-        .setAuthor(`${newMessage.author.username}`, newMessage.author.displayAvatarURL({dynamic: true}))
+        .setAuthor(`${newMessage.author.tag}`, newMessage.author.displaydefaultAvatarURL({dynamic: true}))
         .setColor('ORANGE')
         .setDescription(`**Message edited in** ${newMessage.channel} [jump to message](${newMessage.url})`)
         .addFields (
             { name: `**Before**`, value: `${Before}`},
             { name: `**After**`, value: `${After}`}
         )
-        .setFooter(`${newMessage.author.id}`)
+        .setFooter(`User ID: ${newMessage.author.id} | Message ID: ${newMessage.id}`)
         .setTimestamp()
 
         if (newMessage.attachments.size > 0) {
-            logEmbed.addField(`Attachments:`, `${newMessage.attachments.mmap((a) => a.url)}`, true)
+            logEmbed.addField(`Attachments:`, `${newMessage.attachments.map((a) => a.url)}`, true)
         }
-        newMessage.guild.channels.cache.get("974623329002610689").send({embeds: [logEmbed]})
+        newMessage.guild.channels.cache.get(process.env.discord.logId).send({embeds: [logEmbed]})
     }
 }

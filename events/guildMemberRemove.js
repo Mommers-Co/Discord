@@ -8,6 +8,8 @@ module.exports = {
         const LeaveEmbed = new Discord.MessageEmbed()
             .setColor("#d81e5b")
             .setDescription(`${member.user} left the server!`)
+            .setFooter(`User ID: ${member.id}`)
+            .setTimestamp()
 
             member.guild.channels.cache.get("969241414561062946").send({ embeds: [LeaveEmbed]})
     }
