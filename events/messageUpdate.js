@@ -12,7 +12,7 @@ module.exports = {
         const After = newMessage.content.slice("0", count) + (newMessage.content.length > count? " ...":"");
 
         const logEmbed = new MessageEmbed()
-        .setAuthor(`${newMessage.author.tag}`, newMessage.author.displaydefaultAvatarURL({dynamic: true}))
+        .setAuthor(`${newMessage.author.tag}`, newMessage.author.displayAvatarURL({dynamic: true}))
         .setColor('ORANGE')
         .setDescription(`**Message edited in** ${newMessage.channel} [jump to message](${newMessage.url})`)
         .addFields (
