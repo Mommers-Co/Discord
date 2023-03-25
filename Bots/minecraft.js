@@ -39,8 +39,6 @@ function Start(token, game) {
             }).catch(err => {
                 status = {}
 
-                console.log(err)
-
                 client.user.setActivity(`Server Offline`, { type: 'WATCHING' })
                 client.user.setStatus('dnd')
             })
