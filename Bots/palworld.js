@@ -2,13 +2,14 @@ const Gamedig = require('gamedig')
 const Discord = require('discord.js')
 const client = new Discord.Client({ intents: ['GUILDS'] })
 
+var page = 0
 var status = {}
 
 function Start(token, game) {
     client.login(token)
 
     client.on('ready', async () => {
-        console.log(`Arma 3 Logged in as ${client.user.tag}!`);
+        console.log(`Logged in as ${client.user.tag}!`);
         client.user.setActivity(`Collecting Data...`, { type: 'WATCHING' })
         client.user.setStatus('idle')
 
@@ -17,32 +18,37 @@ function Start(token, game) {
             process.data.games[game] = status
 
             Gamedig.query({
-                type: 'arma3',
-                host: '139.99.131.163',
+                type: 'palworld',
+                host: '103.152.196.49',
                 maxAttempts: 3,
                 socketTimeout: 3000,
-                port: 2302
+                port: 8226
             }).then((body) => {
                 status = body
-                if (body.raw.numplayers > 0) {
-                    client.user.setActivity(`${body.raw.numplayers} / ${body.maxplayers} Players`, { type: 'WATCHING' })
-                    client.user.setStatus('online')
+                client.user.setStatus('online')
+                if (page === 0) {(body.raw.vanilla.raw.players.online > 0)
+                    page = 1
+                    client.user.setActivity(`${body.raw.vanilla.raw.players.online} / ${body.raw.vanilla.raw.players.max} Players`, { type: 'WATCHING' })
+                    return
                 }
-                else {
-                    client.user.setActivity(`No Players Online`, { type: 'WATCHING' })
-                    client.user.setStatus('idle')
+                if (page === 1 ) {
+                    page = 0
+                    client.user.setActivity(`${body.ping} Ping`, {type: 'WATCHING'})
+                    return
                 }
-            }).catch((error) => {
+            }).catch(err => {
                 status = {}
+
                 client.user.setActivity(`Server Offline`, { type: 'WATCHING' })
                 client.user.setStatus('dnd')
             })
 
         }
         setInterval(refresh, 10000)
-        
+
     })
 }
+
 
 
 module.exports = {
