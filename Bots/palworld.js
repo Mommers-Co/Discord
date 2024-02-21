@@ -20,9 +20,9 @@ function Start(token, game) {
             Gamedig.query({
                 type: 'palworld',
                 host: '103.152.196.49',
-                maxAttempts: 3,
-                socketTimeout: 3000,
-                port: 8226
+                port: 8226,
+                maxRetries: 3,
+                socketTimeout: 2000
             }).then((body) => {
                 status = body
                 client.user.setStatus('online')
