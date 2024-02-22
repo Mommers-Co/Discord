@@ -22,13 +22,14 @@ function Start(token, game) {
                 host: '103.152.196.49',
                 port: 8226,
                 maxRetries: 3,
-                socketTimeout: 2000
+                socketTimeout: 2000,
+                debug: true
             }).then((body) => {
                 status = body
                 client.user.setStatus('online')
-                if (page === 0) {(body.raw.vanilla.raw.players.online > 0)
+                if (page === 0) {(body.raw.vanilla.numplayers > 0)
                     page = 1
-                    client.user.setActivity(`${body.raw.vanilla.raw.players.online} / ${body.raw.vanilla.raw.players.max} Players`, { type: 'WATCHING' })
+                    client.user.setActivity(`${body.raw.vanilla.numplayers} / ${body.raw.vanilla.maxplayers} Players`, { type: 'WATCHING' })
                     return
                 }
                 if (page === 1 ) {
