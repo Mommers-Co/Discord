@@ -37,7 +37,7 @@ function Start(token, game) {
                     client.user.setActivity(`${body.ping} Ping`, {type: 'WATCHING'})
                     return
                 }
-            }).catch(err => console.log{
+            }).catch(err => {
                 status = {}
 
                 client.user.setActivity(`Server Offline`, { type: 'WATCHING' })
