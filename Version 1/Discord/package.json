@@ -1,0 +1,34 @@
+{
+  "name": "discord",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon handle.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mommers-Co/Discord.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Mommers-Co/Discord/issues"
+  },
+  "homepage": "https://github.com/Mommers-Co/Discord#readme",
+  "dependencies": {
+    "@discordjs/builders": "^0.13.0",
+    "@discordjs/rest": "^0.4.1",
+    "discord-api-types": "^0.32.0",
+    "discord-logs": "^2.0.1",
+    "discord.js": "^13.14.0",
+    "dotenv": "^16.0.3",
+    "gamedig": "^4.0.6",
+    "nodemon": "^2.0.22"
+  },
+  "devDependencies": {
+    "eslint": "^8.36.0"
+  }
+}
