@@ -133,4 +133,4 @@ dist
 .appwrite
 
 #config
-.json
+config.json
