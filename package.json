@@ -1,18 +1,23 @@
 {
-  "name": "discord-bot",
+  "name": "discord",
   "version": "1.0.0",
-  "description": "",
-  "main": "src/main.js",
-  "type": "module",
+  "main": "gateway.js",
   "scripts": {
-    "format": "prettier --write .",
-    "setup": "node src/setup.js"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon gateway.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mommers-Co/Discord.git"
+  },
+  "keywords": [],
+  "author": "Mommers Co | Development Team",
+  "license": "ISC",
+  "description": "Mommers Co | Discord Bot",
   "dependencies": {
-    "discord-interactions": "^3.4.0",
-    "undici": "^6.18.1"
-  },
-  "devDependencies": {
-    "prettier": "^3.2.5"
+    "appwrite": "^15.0.0",
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "nodemon": "^3.1.4"
   }
 }
