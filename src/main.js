@@ -43,7 +43,23 @@ export default async ({ req, res, error, log }) => {
       200
     );
   }
-
+    if (
+      interaction.type === InteractionType.APPLICATION_COMMAND &&
+      interaction.data.name === 'jokes'
+    ) {
+      log('Matched jokes command - returning message');
+      const response = await fetch("https://v2.jokeapi.dev/joke/Any?type=twopart");
+      const data = await response.json();
+      return res.json(
+        {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `${data.setup} ---------- ${data.delivery}`,
+          },
+        },
+        200
+      );
+    }  
   log("Didn't match command - returning PONG");
 
   return res.json({ type: InteractionResponseType.PONG }, 200);
