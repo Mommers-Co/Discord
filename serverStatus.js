@@ -1,6 +1,27 @@
-async function updateServerStatus(client, config) {
+const si = require('systeminformation');
+const { Client } = require('discord.js');
+const config = require('./config.json'); // Assuming config is a JSON file with relevant settings
+const { logEvent } = require('./logger');
+const { sendAlertToChannel } = require('./client'); // Import the function to send alerts
+
+const client = new Client();
+
+client.login(config.discord.token)
+    .then(() => {
+        console.log(`Logged in as ${client.user.tag}`);
+        logEvent('BotLogin', { message: `Bot logged in as ${client.user.tag}` });
+
+        // Start server status monitoring after bot is logged in
+        startServerStatusMonitoring();
+    })
+    .catch(error => {
+        console.error('Failed to login:', error);
+        logEvent('LoginError', { error: error.message });
+    });
+
+// Function to update server status and send alerts
+async function updateServerStatus() {
     try {
-        // Query system performance
         const cpu = await si.currentLoad();
         const mem = await si.mem();
         const disk = await si.fsSize();
@@ -19,7 +40,7 @@ async function updateServerStatus(client, config) {
         }
 
         if (alertMessage) {
-            sendAlertToChannel(client, config.discord.alertChannelId, alertMessage);
+            sendAlertToChannel(alertMessage);
         }
 
         logEvent('SystemStatusUpdate', {
@@ -30,17 +51,17 @@ async function updateServerStatus(client, config) {
 
     } catch (error) {
         console.error('Failed to update server status:', error);
-        sendErrorToChannel(client, config.guildId, 'System Administrator', `Failed to update server status: ${error.message}\nError Type: ${error.type}\nError Code: ${error.code}`);
         logEvent('ServerStatusUpdateError', { error: error.message });
     }
 }
 
-async function updateServerStatus(client, config) {
-    // Function implementation
+// Function to start server status monitoring at regular intervals
+function startServerStatusMonitoring() {
+    updateServerStatus(); // Initial update
+
+    setInterval(() => {
+        updateServerStatus();
+    }, config.server.monitorInterval * 1000); // Interval in seconds (configured in config.json)
 }
 
-function startServerStatusMonitoring(client, config) {
-    // Function implementation
-}
-
-module.exports = { updateServerStatus, startServerStatusMonitoring };
+module.exports = { client, startServerStatusMonitoring };

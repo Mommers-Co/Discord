@@ -4,7 +4,8 @@
   "main": "gateway.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon gateway.js"
+    "dev": "nodemon gateway.js",
+    "start": "node gateway.js"
   },
   "repository": {
     "type": "git",
