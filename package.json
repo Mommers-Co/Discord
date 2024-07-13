@@ -1,11 +1,11 @@
 {
   "name": "discord",
   "version": "1.0.0",
-  "main": "gateway.js",
+  "main": "gateway/gateway.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon gateway.js",
-    "start": "node gateway.js"
+    "dev": "nodemon gateway/gateway.js",
+    "start": "node gateway/gateway.js"
   },
   "repository": {
     "type": "git",
