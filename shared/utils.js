@@ -2,7 +2,7 @@ const { MessageEmbed } = require('discord.js');
 const config = require('./config.json');
 
 function sendStatusUpdate(client, statusMessage = 'Status update') {
-    const channelId = config.discord.statusChannelId; // Replace with your actual status channel ID
+    const channelId = config.discord.statusChannelId;
     const channel = client.channels.cache.get(channelId);
 
     if (channel) {

@@ -15,7 +15,7 @@ function startServerStatusMonitoring(client) {
 // Function to update server status metrics
 async function updateServerStatus() {
     try {
-        // Example system information update
+        // system information update
         const cpu = await si.currentLoad();
         const mem = await si.mem();
         const disk = await si.fsSize();

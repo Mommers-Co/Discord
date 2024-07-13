@@ -11,7 +11,6 @@ const client = new Client({
         Intents.FLAGS.GUILDS,
         Intents.FLAGS.GUILD_MEMBERS,
         Intents.FLAGS.GUILD_MESSAGES
-        // Add other intents as needed
     ]
 });
 
@@ -53,15 +52,12 @@ client.once('ready', () => {
     logEvent('Client', 'Ready', { user: client.user.tag });
     console.log(`Logged in as ${client.user.tag}`);
     sendStatusUpdate('Bot is online');
-    // Additional client-side operations upon login
 });
 
 client.on('guildMemberAdd', () => {
-    // Handle member add event if necessary
 });
 
 client.on('guildMemberRemove', () => {
-    // Handle member remove event if necessary
 });
 
 client.on('messageCreate', async message => {
@@ -81,19 +77,27 @@ client.on('messageCreate', async message => {
     }
 });
 
-// Login the Discord bot
-client.login(config.discord.token)
-    .then(() => {
-        logEvent('Client', 'Login', `Logged in as ${client.user.tag}`);
-        // Fetch user data from Appwrite after login
-        fetchUserData('12345')
-            .then(data => console.log('Fetched user data:', data))
-            .catch(error => console.error('Error fetching user data:', error));
-        // Additional operations after login if needed
-    })
-    .catch(error => {
-        logEvent('Client', 'LoginError', `Failed to login: ${error.message}`);
-        console.error('Failed to login:', error);
-    });
+// Listen for messages from gateway.js to start client operations
+process.on('message', message => {
+    if (message === 'StartClient') {
+        // Start client operations
+        client.login(config.discord.clientToken)
+            .then(() => {
+                logEvent('Client', 'Login', `Logged in as ${client.user.tag}`);
+                // Fetch user data from Appwrite after login
+                fetchUserData('12345')
+                    .then(data => console.log('Fetched user data:', data))
+                    .catch(error => console.error('Error fetching user data:', error));
+                // Signal gateway.js that client.js is online
+                process.send('ClientOnline');
+            })
+            .catch(error => {
+                logEvent('Client', 'LoginError', `Failed to login: ${error.message}`);
+                console.error('Failed to login:', error);
+                // Signal gateway.js that client.js encountered an error
+                process.send(`ClientError: ${error.message}`);
+            });
+    }
+});
 
 module.exports = { client };

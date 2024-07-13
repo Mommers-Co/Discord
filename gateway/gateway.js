@@ -1,31 +1,29 @@
-const { Client, MessageEmbed, Intents } = require('discord.js');
+const { Client, Intents } = require('discord.js');
 const { logEvent } = require('../shared/logger'); // Import logEvent from logger
 const { fork } = require('child_process');
 const path = require('path');
 const config = require('../config.json'); // Load config.json from the directory
+const { createClient } = require('appwrite'); // Import createClient from appwrite
 
-let appwriteClient;
 let gatewayClient;
 let clientProcess;
 
 // Function to initialize Appwrite client
 async function initializeAppwriteClient() {
     try {
-        appwriteClient = createClient({
+        const appwriteClient = createClient({
             endpoint: config.appwrite.endpoint,
             project: config.appwrite.projectId,
             apiKey: config.appwrite.apiKey,
         });
         logEvent('Gateway', 'AppwriteClient', 'Appwrite client initialized successfully');
+        startClientProcess();
+        startDiscordClient();
     } catch (error) {
         logEvent('Gateway', 'AppwriteClientError', `Failed to initialize Appwrite client: ${error.message}`);
         console.error('Failed to initialize Appwrite client:', error);
         await restartGateway('Appwrite client initialization failed');
-        return;
     }
-
-    startClientProcess();
-    startDiscordClient();
 }
 
 // Function to start the client.js process as a child process
@@ -92,6 +90,7 @@ function restartDiscordClient() {
 function startGateway() {
     startClientProcess(); // Start client.js process
     startServerStatusMonitoring(); // Start server status monitoring
+    sendMessageToClient('StartClient'); // Signal client.js to start
 }
 
 // Function to send status update as an embed message to a specific Discord channel
@@ -149,9 +148,6 @@ async function restartGateway(reason) {
     console.log(`Restarting gateway due to: ${reason}`);
 
     // Clean up existing resources if needed
-    if (appwriteClient) {
-        await appwriteClient.destroy(); // Example: If Appwrite client has a destroy method
-    }
     if (clientProcess) {
         clientProcess.kill('SIGINT'); // Kill the client process
     }
@@ -162,7 +158,7 @@ async function restartGateway(reason) {
     // Delay before restarting
     setTimeout(() => {
         initializeAppwriteClient(); // Reinitialize the gateway
-    }, 5000); // Delayed restart after 5 seconds
+    }, 10000); // Delayed restart after 10 seconds
 }
 
 // Initial Appwrite client initialization
