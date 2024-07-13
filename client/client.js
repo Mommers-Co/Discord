@@ -1,4 +1,4 @@
-const { Client, Intents, MessageEmbed } = require('discord.js');
+const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
 const { logEvent, sendStatusUpdate } = require('../shared/logger');
 const config = require('../config.json');
 const { Client: AppwriteClient } = require('appwrite');
@@ -8,9 +8,9 @@ const fs = require('fs');
 // Initialize Discord client
 const client = new Client({
     intents: [
-        Intents.FLAGS.GUILDS,
-        Intents.FLAGS.GUILD_MEMBERS,
-        Intents.FLAGS.GUILD_MESSAGES
+        GatewayIntentBits.GUILDS,
+        GatewayIntentBits.GUILD_MEMBERS,
+        GatewayIntentBits.GUILD_MESSAGES
     ]
 });
 

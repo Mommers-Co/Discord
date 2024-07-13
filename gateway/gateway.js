@@ -37,7 +37,7 @@ function startDiscordClient() {
 function startClientProcess() {
     try {
         console.log('Starting client.js process...');
-        clientProcess = fork(path.join(__dirname, 'client.js'));
+        clientProcess = fork(path.join(__dirname, '..', 'client.js'));
 
         clientProcess.on('message', message => {
             if (message === 'ClientOnline') {
