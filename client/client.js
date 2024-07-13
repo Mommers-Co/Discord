@@ -1,5 +1,5 @@
-const { Client, Intents } = require('discord.js');
-const { logEvent, sendStatusUpdate } = require('./shared/logger');
+const { Client, Intents, MessageEmbed } = require('discord.js');
+const { logEvent, sendStatusUpdate } = require('../shared/logger');
 const config = require('../config.json');
 const { createClient } = require('appwrite');
 const path = require('path');

@@ -5,10 +5,31 @@ const config = require('../config.json');
 const zlib = require('zlib');
 
 const logDirectory = path.join(__dirname, '..', 'logs'); // Directory for log files
+const exportDirectory = path.join(logDirectory, 'exports'); // Export directory
 
-// Ensure log directory exists, create if it doesn't
+// Ensure log and export directories exist
 if (!fs.existsSync(logDirectory)) {
-    fs.mkdirSync(logDirectory);
+    fs.mkdirSync(logDirectory, { recursive: true });
+}
+
+if (!fs.existsSync(exportDirectory)) {
+    fs.mkdirSync(exportDirectory, { recursive: true });
+}
+
+// Function to ensure log file exists for the module
+function ensureLogFile(moduleName) {
+    const moduleLogDirectory = path.join(logDirectory, moduleName);
+
+    // Create module-specific log directory if it doesn't exist
+    if (!fs.existsSync(moduleLogDirectory)) {
+        fs.mkdirSync(moduleLogDirectory, { recursive: true });
+    }
+
+    // Create module-specific log file if it doesn't exist
+    const logFilePath = path.join(moduleLogDirectory, `${moduleName}.log`);
+    if (!fs.existsSync(logFilePath)) {
+        fs.writeFileSync(logFilePath, ''); // Create an empty file
+    }
 }
 
 let gatewayClient; // Declare gatewayClient globally
@@ -25,6 +46,7 @@ function initDiscordClient() {
 
 // Function to log events with a timestamp
 function logEvent(moduleName, eventName, eventData) {
+    ensureLogFile(moduleName); // Ensure log file exists
     const logEntry = `[${new Date().toLocaleString()}] [${moduleName}] Event: ${eventName} ${JSON.stringify(eventData)}\n`;
     console.log(logEntry);
     appendLogToFile(moduleName, logEntry); // Append log to file
@@ -32,14 +54,7 @@ function logEvent(moduleName, eventName, eventData) {
 
 // Append log entry to a log file for the specific module
 function appendLogToFile(moduleName, logEntry) {
-    const moduleLogDirectory = path.join(logDirectory, moduleName);
-
-    // Create module-specific log directory if it doesn't exist
-    if (!fs.existsSync(moduleLogDirectory)) {
-        fs.mkdirSync(moduleLogDirectory);
-    }
-
-    const logFilePath = path.join(moduleLogDirectory, `${moduleName}.log`);
+    const logFilePath = path.join(logDirectory, moduleName, `${moduleName}.log`);
 
     fs.appendFile(logFilePath, logEntry, (err) => {
         if (err) {
@@ -50,67 +65,56 @@ function appendLogToFile(moduleName, logEntry) {
 
 // Function to compress log file using zlib
 function compressLogFile(moduleName) {
-    const moduleLogDirectory = path.join(logDirectory, moduleName);
-    const logFilePath = path.join(moduleLogDirectory, `${moduleName}.log`);
-    const compressedFilePath = path.join(moduleLogDirectory, `${moduleName}.log.gz`);
+    const logFilePath = path.join(logDirectory, moduleName, `${moduleName}.log`);
+    const compressedFilePath = path.join(logDirectory, moduleName, `${moduleName}.log.gz`);
 
-    const gzip = zlib.createGzip();
-    const input = fs.createReadStream(logFilePath);
-    const output = fs.createWriteStream(compressedFilePath);
+    if (fs.existsSync(logFilePath)) {
+        const gzip = zlib.createGzip();
+        const input = fs.createReadStream(logFilePath);
+        const output = fs.createWriteStream(compressedFilePath);
 
-    input.pipe(gzip).pipe(output);
+        input.pipe(gzip).pipe(output);
 
-    // Clear log file after compression
-    fs.truncate(logFilePath, 0, (err) => {
-        if (err) {
-            console.error(`[${new Date().toLocaleString()}] Error truncating log file (${moduleName}) after compression: ${err}`);
-        }
-    });
-}
-
-// Function to export logs periodically and compress log file
-function exportLogsPeriodically(moduleName) {
-    setInterval(() => {
-        compressLogFile(moduleName); // Compress log file
-    }, 60000); // Compress log file every 60 seconds
-
-    setInterval(() => {
-        const logFilePath = path.join(logDirectory, moduleName, `${moduleName}.log`);
-        const exportFilePath = path.join(logDirectory, 'exports', `${moduleName}-export-${new Date().toISOString().replace(/:/g, '-')}.log`);
-
-        fs.copyFile(logFilePath, exportFilePath, (err) => {
+        // Clear log file after compression
+        fs.truncate(logFilePath, 0, (err) => {
             if (err) {
-                console.error(`[${new Date().toLocaleString()}] Error exporting log file (${moduleName}): ${err}`);
-            } else {
-                console.log(`[${new Date().toLocaleString()}] Log file exported (${moduleName}) to ${exportFilePath}`);
+                console.error(`[${new Date().toLocaleString()}] Error truncating log file (${moduleName}) after compression: ${err}`);
             }
         });
-    }, 1000); // Export log file every second
+    } else {
+        console.error(`[${new Date().toLocaleString()}] Log file (${moduleName}.log) not found for compression.`);
+    }
 }
 
 // Function to export logs on crash/error and compress log file
 function exportLogsOnCrash(moduleName) {
     process.on('uncaughtException', (err) => {
-        const crashLogDirectory = path.join(logDirectory, 'crash_logs');
-        if (!fs.existsSync(crashLogDirectory)) {
-            fs.mkdirSync(crashLogDirectory);
-        }
-        const crashLogFilePath = path.join(crashLogDirectory, `${moduleName}_crash.log`);
-        const logContent = fs.readFileSync(path.join(logDirectory, moduleName, `${moduleName}.log`));
-        
-        fs.writeFileSync(crashLogFilePath, logContent);
+        handleCrash(moduleName, err);
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-        const crashLogDirectory = path.join(logDirectory, 'crash_logs');
-        if (!fs.existsSync(crashLogDirectory)) {
-            fs.mkdirSync(crashLogDirectory);
-        }
-        const crashLogFilePath = path.join(crashLogDirectory, `${moduleName}_crash.log`);
-        const logContent = fs.readFileSync(path.join(logDirectory, moduleName, `${moduleName}.log`));
-        
-        fs.writeFileSync(crashLogFilePath, logContent);
+        handleCrash(moduleName, reason);
     });
+}
+
+function handleCrash(moduleName, error) {
+    const crashLogDirectory = path.join(logDirectory, 'crash_logs');
+    if (!fs.existsSync(crashLogDirectory)) {
+        fs.mkdirSync(crashLogDirectory, { recursive: true });
+    }
+
+    const crashLogFilePath = path.join(crashLogDirectory, `${moduleName}_crash.log`);
+    const logFilePath = path.join(logDirectory, moduleName, `${moduleName}.log`);
+
+    let logContent = '';
+
+    if (fs.existsSync(logFilePath)) {
+        logContent = fs.readFileSync(logFilePath);
+    } else {
+        console.error(`[${new Date().toLocaleString()}] Log file (${moduleName}.log) not found for crash export.`);
+    }
+
+    fs.writeFileSync(crashLogFilePath, logContent);
 }
 
 // Function to send status update to Discord channel
@@ -140,9 +144,8 @@ function sendStatusUpdate(statusMessage = 'Status update') {
     }
 }
 
-// Start exporting logs and compressing log file for the gateway module
-exportLogsPeriodically('gateway');
-exportLogsOnCrash('gateway');
+// Ensure log files exist for each module and start handling crashes
+ensureLogFile('gateway'); // Example for the 'gateway' module
+exportLogsOnCrash('gateway'); // Example for the 'gateway' module
 
 module.exports = { logEvent, sendStatusUpdate };
-

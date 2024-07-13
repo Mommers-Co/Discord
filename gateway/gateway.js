@@ -1,5 +1,5 @@
 const { Client, Intents } = require('discord.js');
-const { logEvent } = require('../shared/logger'); // Import logEvent from logger
+const { logEvent } = require('../shared/logger'); // Import logEvent and sendStatusUpdate from logger
 const { fork } = require('child_process');
 const path = require('path');
 const config = require('../config.json'); // Load config.json from the directory
@@ -17,8 +17,7 @@ async function initializeAppwriteClient() {
             apiKey: config.appwrite.apiKey,
         });
         logEvent('Gateway', 'AppwriteClient', 'Appwrite client initialized successfully');
-        startClientProcess();
-        startDiscordClient();
+        startDiscordClient(); // Start Discord client after initializing Appwrite client
     } catch (error) {
         logEvent('Gateway', 'AppwriteClientError', `Failed to initialize Appwrite client: ${error.message}`);
         console.error('Failed to initialize Appwrite client:', error);
@@ -65,7 +64,7 @@ function restartClientProcess() {
 function startDiscordClient() {
     gatewayClient = new Client({ intents: Object.values(Intents.FLAGS) });
 
-    gatewayClient.login(config.discord.token)
+    gatewayClient.login(config.discord.gatewayToken)
         .then(() => {
             logEvent('Gateway', 'Login', `Logged in as ${gatewayClient.user.tag}`);
             console.log(`Logged in as ${gatewayClient.user.tag}`);
@@ -163,3 +162,52 @@ async function restartGateway(reason) {
 
 // Initial Appwrite client initialization
 initializeAppwriteClient();
+
+// Import necessary modules and setup configurations
+
+// Add a global error handler for uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    // Handle or log the error as needed
+    process.exit(1); // Exit process after handling
+});
+
+// Ensure log and export directories exist
+
+// Function to initialize Appwrite client and start operations
+async function initializeAppwriteClient() {
+    try {
+        // Initialize Appwrite client and start necessary processes
+    } catch (error) {
+        console.error('Failed to initialize Appwrite client:', error);
+        process.exit(1); // Exit process on initialization error
+    }
+}
+
+// Function to start Discord client and handle login
+function startDiscordClient() {
+    try {
+        // Start Discord client login process and handle errors
+    } catch (error) {
+        console.error('Failed to login to Discord:', error);
+        process.exit(1); // Exit process on login error
+    }
+}
+
+// Function to start gateway operations after clients are initialized
+function startGateway() {
+    try {
+        initializeAppwriteClient();
+        startDiscordClient();
+        // Add other operations as needed
+    } catch (error) {
+        console.error('Error starting gateway operations:', error);
+        process.exit(1); // Exit process on startup error
+    }
+}
+
+// Start gateway operations when script is executed
+startGateway();
+
+
+module.exports = { sendStatusUpdate }; // Export sendStatusUpdate if needed externally
