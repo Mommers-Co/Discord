@@ -1,21 +1,21 @@
 const si = require('systeminformation');
 const { sendStatusUpdate } = require('./utils');
-const { logEvent } = require('./logger');
-const { serverConfig } = require('./constants');
+const { logEvent } = require('../shared/logger');
+const { serverConfig } = require('../shared/constants');
 
-// function to start server status monitoring
+// Function to start server status monitoring
 function startServerStatusMonitoring(client) {
     setInterval(() => {
         const statusMessage = `Server status update: ${new Date().toLocaleTimeString()}`;
         sendStatusUpdate(client, statusMessage);
-        updateServerStatus();
+        updateServerStatus(client);
     }, serverConfig.monitorInterval * 1000); // Update status every `monitorInterval` seconds
 }
 
 // Function to update server status metrics
-async function updateServerStatus() {
+async function updateServerStatus(client) {
     try {
-        // system information update
+        // Retrieve system information
         const cpu = await si.currentLoad();
         const mem = await si.mem();
         const disk = await si.fsSize();
@@ -26,10 +26,10 @@ async function updateServerStatus() {
         if (cpu.currentLoad > alertThresholds.cpu) {
             alertMessage += `⚠️ High CPU usage: ${cpu.currentLoad.toFixed(2)}%\n`;
         }
-        if (mem.used / mem.total > alertThresholds.memory) {
+        if ((mem.used / mem.total) * 100 > alertThresholds.memory) {
             alertMessage += `⚠️ High memory usage: ${(mem.used / mem.total * 100).toFixed(2)}%\n`;
         }
-        if (disk[0].use > alertThresholds.disk) {
+        if (disk.length > 0 && disk[0].use > alertThresholds.disk) {
             alertMessage += `⚠️ High disk usage: ${disk[0].use}%\n`;
         }
 
@@ -38,9 +38,9 @@ async function updateServerStatus() {
         }
 
         logEvent('SystemStatusUpdate', {
-            cpuLoad: cpu.currentLoad,
-            memoryUsage: mem.used / mem.total,
-            diskUsage: disk[0].use
+            cpuLoad: cpu.currentLoad.toFixed(2),
+            memoryUsage: ((mem.used / mem.total) * 100).toFixed(2),
+            diskUsage: disk.length > 0 ? disk[0].use : 'N/A'
         });
 
     } catch (error) {

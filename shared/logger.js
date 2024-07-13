@@ -118,18 +118,18 @@ function handleCrash(moduleName, error) {
 }
 
 // Function to send status update to Discord channel
-function sendStatusUpdate(statusMessage = 'Status update') {
+function sendStatusUpdate(client, statusMessage = 'Status update') {
     initDiscordClient();
 
     const channelId = config.discord.statusChannelId;
 
-    if (gatewayClient) {
-        const channel = gatewayClient.channels.cache.get(channelId);
+    if (client) {
+        const channel = client.channels.cache.get(channelId);
 
         if (channel) {
             const embed = new MessageEmbed()
                 .setColor('#0099ff')
-                .setTitle('Gateway Status Update')
+                .setTitle('Server Status Update')
                 .setDescription(statusMessage)
                 .setTimestamp();
 

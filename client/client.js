@@ -1,7 +1,7 @@
 const { Client, Intents, MessageEmbed } = require('discord.js');
 const { logEvent, sendStatusUpdate } = require('../shared/logger');
 const config = require('../config.json');
-const { createClient } = require('appwrite');
+const { Client: AppwriteClient } = require('appwrite');
 const path = require('path');
 const fs = require('fs');
 
@@ -15,13 +15,13 @@ const client = new Client({
 });
 
 // Initialize Appwrite client
-const appwriteClient = createClient({
-    endpoint: config.appwrite.endpoint,
-    project: config.appwrite.projectId,
-    apiKey: config.appwrite.apiKey,
-});
+const appwriteClient = new AppwriteClient();
+appwriteClient
+    .setEndpoint(config.appwrite.endpoint)
+    .setProject(config.appwrite.projectId)
+    .setKey(config.appwrite.apiKey);
 
-// function to interact with Appwrite service
+// Function to interact with Appwrite service
 async function fetchUserData(userId) {
     try {
         const response = await appwriteClient.database.listDocuments('users', ['userId', '==', userId]);
@@ -54,10 +54,12 @@ client.once('ready', () => {
     sendStatusUpdate('Bot is online');
 });
 
-client.on('guildMemberAdd', () => {
+client.on('guildMemberAdd', member => {
+    logEvent('Client', 'GuildMemberAdd', { member: member.user.tag });
 });
 
-client.on('guildMemberRemove', () => {
+client.on('guildMemberRemove', member => {
+    logEvent('Client', 'GuildMemberRemove', { member: member.user.tag });
 });
 
 client.on('messageCreate', async message => {
@@ -86,15 +88,23 @@ process.on('message', message => {
                 logEvent('Client', 'Login', `Logged in as ${client.user.tag}`);
                 // Fetch user data from Appwrite after login
                 fetchUserData('12345')
-                    .then(data => console.log('Fetched user data:', data))
-                    .catch(error => console.error('Error fetching user data:', error));
-                // Signal gateway.js that client.js is online
-                process.send('ClientOnline');
+                    .then(data => {
+                        logEvent('Client', 'FetchUserData', data);
+                        console.log('Fetched user data:', data);
+                        // Signal gateway.js that client.js is online
+                        process.send('ClientOnline');
+                    })
+                    .catch(error => {
+                        logEvent('Client', 'FetchUserDataError', `Failed to fetch user data: ${error.message}`);
+                        console.error('Error fetching user data:', error);
+                        // Signal gateway.js that client.js encountered an error
+                        process.send(`ClientError: ${error.message}`);
+                    });
             })
             .catch(error => {
                 logEvent('Client', 'LoginError', `Failed to login: ${error.message}`);
                 console.error('Failed to login:', error);
-                // Signal gateway.js that client.js encountered an error
+                // Signal gateway.js that client.js encountered an error during login
                 process.send(`ClientError: ${error.message}`);
             });
     }

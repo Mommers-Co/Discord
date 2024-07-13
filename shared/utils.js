@@ -1,22 +1,29 @@
+// utils.js
 const { MessageEmbed } = require('discord.js');
-const config = require('./config.json');
+const config = require('../config.json');
 
+// Function to send status update to Discord channel
 function sendStatusUpdate(client, statusMessage = 'Status update') {
     const channelId = config.discord.statusChannelId;
-    const channel = client.channels.cache.get(channelId);
 
-    if (channel) {
-        const embed = new MessageEmbed()
-            .setColor('#0099ff')
-            .setTitle('Status Update')
-            .setDescription(statusMessage)
-            .setTimestamp();
+    if (client) {
+        const channel = client.channels.cache.get(channelId);
 
-        channel.send({ embeds: [embed] })
-            .then(() => console.log(`Status update sent to channel ${channelId}`))
-            .catch(error => console.error('Failed to send status update:', error));
+        if (channel) {
+            const embed = new MessageEmbed()
+                .setColor('#0099ff')
+                .setTitle('Gateway Status Update')
+                .setDescription(statusMessage)
+                .setTimestamp();
+
+            channel.send({ embeds: [embed] })
+                .then(() => console.log(`[${new Date().toLocaleString()}] Status update sent to channel ${channelId}`))
+                .catch(error => console.error(`[${new Date().toLocaleString()}] Failed to send status update: ${error}`));
+        } else {
+            console.error(`[${new Date().toLocaleString()}] Channel ${channelId} not found.`);
+        }
     } else {
-        console.error(`Channel ${channelId} not found.`);
+        console.error(`[${new Date().toLocaleString()}] Discord client not initialized.`);
     }
 }
 
