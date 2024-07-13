@@ -3,7 +3,7 @@ const { sendStatusUpdate } = require('./utils');
 const { logEvent } = require('./logger');
 const { serverConfig } = require('./constants');
 
-// Example function to start server status monitoring
+// function to start server status monitoring
 function startServerStatusMonitoring(client) {
     setInterval(() => {
         const statusMessage = `Server status update: ${new Date().toLocaleTimeString()}`;

@@ -50,7 +50,7 @@ setTimeout(() => {
 
 // Function to send status update as an embed message to a specific Discord channel
 function sendStatusUpdate(statusMessage = 'Gateway status update') {
-    const channelId = config.discord.statusChannelId; // Replace with your actual status channel ID
+    const channelId = config.discord.statusChannelId;
     const channel = client.channels.cache.get(channelId);
 
     if (channel) {
@@ -73,7 +73,7 @@ function sendMessageToClient(message) {
     clientProcess.send(message);
 }
 
-// Example: Sending a message to client.js
+// Sending a message to client.js
 setTimeout(() => {
     sendMessageToClient('Hello from gateway.js');
 }, 5000);
@@ -90,7 +90,7 @@ gatewayClient.login(config.discord.gatewayToken)
         sendStatusUpdate(`Gateway failed to login: ${error.message}`);
     });
 
-// Example function to start server status monitoring
+// start server status monitoring
 function startServerStatusMonitoring() {
     setInterval(() => {
         const statusMessage = `Server status update: ${new Date().toLocaleTimeString()}`;

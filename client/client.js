@@ -22,7 +22,7 @@ const appwriteClient = createClient({
     apiKey: config.appwrite.apiKey,
 });
 
-// Example function to interact with Appwrite service
+// function to interact with Appwrite service
 async function fetchUserData(userId) {
     try {
         const response = await appwriteClient.database.listDocuments('users', ['userId', '==', userId]);
@@ -85,7 +85,7 @@ client.on('messageCreate', async message => {
 client.login(config.discord.token)
     .then(() => {
         logEvent('Client', 'Login', `Logged in as ${client.user.tag}`);
-        // Example: Fetch user data from Appwrite after login
+        // Fetch user data from Appwrite after login
         fetchUserData('12345')
             .then(data => console.log('Fetched user data:', data))
             .catch(error => console.error('Error fetching user data:', error));
