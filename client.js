@@ -1,9 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits } = require('discord.js');
-const { logEvent } = require('./logger');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent] });
 client.commands = new Map();
 
 // Load configuration
@@ -55,15 +54,6 @@ client.on('messageCreate', async message => {
     } catch (error) {
         console.error('Error executing command:', error);
         message.reply('There was an error executing that command.');
-
-        // Log the error event
-        await logEvent('command_execution_error', {
-            errorMessage: error.message,
-            command: commandName,
-            guild: message.guild ? message.guild.name : 'Direct Message',
-            user: message.author.tag,
-            timestamp: new Date().toISOString()
-        });
     }
 });
 
