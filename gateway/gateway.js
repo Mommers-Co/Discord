@@ -1,11 +1,7 @@
-const { Client, MessageEmbed } = require('discord.js');
+const { Client, MessageEmbed, Intents } = require('discord.js');
 const { logEvent } = require('../shared/logger'); // Import logEvent from logger
 const { fork } = require('child_process');
 const path = require('path');
-
-// Import createClient from appwrite module
-const { createClient } = require('appwrite');
-
 const config = require('../config.json'); // Load config.json from the directory
 
 let appwriteClient;
@@ -55,8 +51,7 @@ function startClientProcess() {
         logEvent('Gateway', 'ClientExit', `client.js exited with code: ${code}`);
         console.error('client.js exited with code:', code);
         sendStatusUpdate('client.js exited unexpectedly.');
-        // Handle restarting client.js or other actions as needed
-        startClientProcess(); // Restart client.js
+        restartClientProcess(); // Restart client.js
     });
 }
 
@@ -70,17 +65,17 @@ function restartClientProcess() {
 
 // Function to start the Discord client
 function startDiscordClient() {
-    gatewayClient = new Client();
-    gatewayClient.login(config.discord.gatewayToken)
+    gatewayClient = new Client({ intents: Object.values(Intents.FLAGS) });
+
+    gatewayClient.login(config.discord.token)
         .then(() => {
             logEvent('Gateway', 'Login', `Logged in as ${gatewayClient.user.tag}`);
             console.log(`Logged in as ${gatewayClient.user.tag}`);
-            startServerStatusMonitoring(); // Start server status monitoring after login
+            startGateway(); // Start gateway operations after login
         })
         .catch(error => {
             logEvent('Gateway', 'LoginError', `Failed to login: ${error.message}`);
             console.error('Failed to login:', error);
-            sendStatusUpdate(`Gateway failed to login: ${error.message}`);
             restartDiscordClient();
         });
 }
@@ -91,6 +86,12 @@ function restartDiscordClient() {
     setTimeout(() => {
         startDiscordClient();
     }, 5000); // Delayed restart after 5 seconds
+}
+
+// Function to start gateway operations
+function startGateway() {
+    startClientProcess(); // Start client.js process
+    startServerStatusMonitoring(); // Start server status monitoring
 }
 
 // Function to send status update as an embed message to a specific Discord channel
