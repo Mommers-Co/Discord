@@ -1,9 +1,10 @@
 const { initializeAppwriteClient } = require('./appwriteInit');
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, Intents } = require('discord.js');
 const { logEvent } = require('../shared/logger');
 const { fork } = require('child_process');
 const path = require('path');
 const config = require('../config.json');
+const { GatewayIntentBits } = require('@discordjs/builders'); // Updated import for GatewayIntentBits
 
 let gatewayClient;
 let clientProcess;
@@ -15,15 +16,15 @@ console.log('Starting gateway...');
 function startDiscordClient() {
     try {
         const intents = [
-            GatewayIntentBits.GUILDS,
-            GatewayIntentBits.GUILD_MESSAGES,
-            GatewayIntentBits.MESSAGE_CONTENT,
-            GatewayIntentBits.GUILD_MEMBERS
+            GatewayIntentBits.Guilds,
+            GatewayIntentBits.GuildMessages,
+            GatewayIntentBits.MessageContent,
+            GatewayIntentBits.GuildMembers
         ];
 
         console.log('Intents:', intents);
 
-        gatewayClient = new Client({ intents });
+        gatewayClient = new Client({ intents: intents });
 
         gatewayClient.login(config.discord.gatewayToken)
             .then(() => {
