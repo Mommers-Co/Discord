@@ -1,7 +1,6 @@
-const { Client, GatewayIntentBits } = require('discord.js');
-const { Client: AppwriteClient } = require('node-appwrite'); // Ensure the correct module is imported
-const config = require('../config.json'); // Load config.json from the directory
-const { logEvent } = require('../shared/logger'); // Import shared logger module
+const { Client: AppwriteClient } = require('node-appwrite');
+const config = require('../config.json');
+const { logEvent } = require('../shared/logger');
 
 // Function to initialize Appwrite client
 async function initializeAppwriteClient() {

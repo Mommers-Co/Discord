@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
 const { logEvent, sendStatusUpdate } = require('../shared/logger');
 const config = require('../config.json');
-const { Client: AppwriteClient } = require('appwrite');
+const { Client: AppwriteClient } = require('node-appwrite');
 const path = require('path');
 const fs = require('fs');
 
@@ -10,7 +10,8 @@ const client = new Client({
     intents: [
         GatewayIntentBits.GUILDS,
         GatewayIntentBits.GUILD_MEMBERS,
-        GatewayIntentBits.GUILD_MESSAGES
+        GatewayIntentBits.GUILD_MESSAGES,
+        GatewayIntentBits.MESSAGE_CONTENT
     ]
 });
 
@@ -51,7 +52,7 @@ if (fs.existsSync(commandsDir)) {
 client.once('ready', () => {
     logEvent('Client', 'Ready', { user: client.user.tag });
     console.log(`Logged in as ${client.user.tag}`);
-    sendStatusUpdate('Bot is online');
+    sendStatusUpdate(client, 'Bot is online');
 });
 
 client.on('guildMemberAdd', member => {
@@ -82,29 +83,24 @@ client.on('messageCreate', async message => {
 // Listen for messages from gateway.js to start client operations
 process.on('message', message => {
     if (message === 'StartClient') {
-        // Start client operations
         client.login(config.discord.clientToken)
             .then(() => {
                 logEvent('Client', 'Login', `Logged in as ${client.user.tag}`);
-                // Fetch user data from Appwrite after login
                 fetchUserData('12345')
                     .then(data => {
                         logEvent('Client', 'FetchUserData', data);
                         console.log('Fetched user data:', data);
-                        // Signal gateway.js that client.js is online
                         process.send('ClientOnline');
                     })
                     .catch(error => {
                         logEvent('Client', 'FetchUserDataError', `Failed to fetch user data: ${error.message}`);
                         console.error('Error fetching user data:', error);
-                        // Signal gateway.js that client.js encountered an error
                         process.send(`ClientError: ${error.message}`);
                     });
             })
             .catch(error => {
                 logEvent('Client', 'LoginError', `Failed to login: ${error.message}`);
                 console.error('Failed to login:', error);
-                // Signal gateway.js that client.js encountered an error during login
                 process.send(`ClientError: ${error.message}`);
             });
     }
