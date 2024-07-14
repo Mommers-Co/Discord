@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
+const { Client, Intents, MessageEmbed } = require('discord.js');
+const { GatewayIntentBits } = require('@discordjs/builders');
 const config = require('../config.json');
 const zlib = require('zlib');
 
@@ -32,10 +33,10 @@ function initDiscordClient() {
     if (!gatewayClient) {
         gatewayClient = new Client({
             intents: [
-                GatewayIntentBits.GUILDS,
-                GatewayIntentBits.GUILD_MEMBERS,
-                GatewayIntentBits.GUILD_MESSAGES,
-                GatewayIntentBits.MESSAGE_CONTENT
+                GatewayIntentBits.Guilds,
+                GatewayIntentBits.GuildMembers,
+                GatewayIntentBits.GuildMessages,
+                GatewayIntentBits.MessageContent
             ]
         });
 
