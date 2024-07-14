@@ -1,0 +1,32 @@
+<!-- /support/dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Support Dashboard</title>
+    <script src="https://unpkg.com/appwrite"></script>
+    <script src="dashboard.js" defer></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Support Tickets</h1>
+    <table id="ticketsTable">
+        <thead>
+            <tr>
+                <th>Ticket ID</th>
+                <th>User ID</th>
+                <th>Content</th>
+                <th>Status</th>
+                <th>Created At</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</body>
+</html>
