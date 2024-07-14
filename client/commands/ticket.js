@@ -1,15 +1,11 @@
 // /Discord/commands/ticket.js
-const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
+const { Client, MessageEmbed } = require('discord.js');
 const { logEvent } = require('../shared/logger');
-const { Client: AppwriteClient } = require('appwrite');
+const { getAppwriteClient } = require('../gateway/appwrite');
 const config = require('../config.json');
 
 // Initialize Appwrite client
-const appwriteClient = new AppwriteClient();
-appwriteClient
-    .setEndpoint(config.appwrite.endpoint)
-    .setProject(config.appwrite.projectId)
-    .setKey(config.appwrite.apiKey);
+const appwriteClient = getAppwriteClient();
 
 module.exports = {
     name: 'ticket',

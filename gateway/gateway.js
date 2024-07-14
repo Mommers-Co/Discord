@@ -1,130 +1,103 @@
-const { initializeAppwriteClient } = require('./appwriteInit');
-const { Client, Intents } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
 const { logEvent } = require('../shared/logger');
 const { fork } = require('child_process');
 const path = require('path');
 const config = require('../config.json');
-const { GatewayIntentBits } = require('@discordjs/builders'); // Updated import for GatewayIntentBits
-
-let gatewayClient;
-let clientProcess;
-let appwriteClient;
+const { initializeAppwriteClient, getAppwriteClient } = require('./appwrite');
 
 console.log('Starting gateway...');
 
+// Initialize Discord client
+const gatewayIntents = [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContents
+];
+
+const gatewayClient = new Client({ 
+    intents: gatewayIntents,
+    allowedMentions: { parse: ['users', 'roles'], repliedUser: true }
+});
+
 // Function to start the Discord client
-function startDiscordClient() {
+async function startDiscordClient() {
     try {
-        const intents = [
-            GatewayIntentBits.Guilds,
-            GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContent,
-            GatewayIntentBits.GuildMembers
-        ];
-
-        console.log('Intents:', intents);
-
-        gatewayClient = new Client({ intents: intents });
-
-        gatewayClient.login(config.discord.gatewayToken)
-            .then(() => {
-                logEvent('Gateway', 'Login', `Logged in as ${gatewayClient.user.tag}`);
-                console.log(`Logged in as ${gatewayClient.user.tag}`);
-                startGateway();
-            })
-            .catch(error => {
-                logEvent('Gateway', 'LoginError', `Failed to login: ${error.message}`);
-                console.error('Failed to login:', error);
-                restartDiscordClient();
-            });
+        await gatewayClient.login(config.discord.clientToken);
+        logEvent('Gateway', 'Login', `Logged in as ${gatewayClient.user.tag}`);
+        console.log(`Logged in as ${gatewayClient.user.tag}`);
+        initializeClientProcess(); // Start client.js after Discord client is online
     } catch (error) {
-        logEvent('Gateway', 'DiscordClientError', `Error starting Discord client: ${error.message}`);
-        console.error('Error starting Discord client:', error);
+        handleClientError('Gateway', 'LoginError', 'Failed to login', error);
+        setTimeout(restartDiscordClient, 30000); // Restart client after 30 seconds
     }
 }
 
-// Function to start the client.js process as a child process
-function startClientProcess() {
+// Function to initialize client.js process as a child process
+function initializeClientProcess() {
     try {
-        console.log('Starting client.js process...');
-        clientProcess = fork(path.join(__dirname, '..', 'client.js'));
+        console.log('Initializing client.js process...');
+        const clientProcess = fork(path.join(__dirname, '..', '..', 'client', 'client.js'));
 
         clientProcess.on('message', message => {
             if (message === 'ClientOnline') {
                 logEvent('Gateway', 'ClientOnline', 'Successfully connected with client.js');
             } else if (message.startsWith('ClientError:')) {
-                const errorMessage = message.slice('ClientError:'.length).trim();
-                logEvent('Gateway', 'ClientError', errorMessage);
-                console.error('Error from client.js:', errorMessage);
+                handleClientError('Gateway', 'ClientError', 'Error from client.js', message.slice('ClientError:'.length).trim());
             } else {
                 logEvent('Gateway', 'MessageReceived', message);
                 console.log('Received message from client.js:', message);
             }
         });
 
-        clientProcess.on('exit', (code) => {
+        clientProcess.on('exit', code => {
             logEvent('Gateway', 'ClientExit', `client.js exited with code: ${code}`);
-            console.error('client.js exited with code:', code);
             restartClientProcess();
         });
+
+        // Send message to client.js to start
+        clientProcess.send('StartClient');
+
     } catch (error) {
-        logEvent('Gateway', 'ClientProcessError', `Error starting client.js process: ${error.message}`);
-        console.error('Error starting client.js process:', error);
+        handleClientError('Gateway', 'ClientProcessError', 'Error starting client.js process', error);
+        setTimeout(restartClientProcess, 30000); // Restart client.js process after 30 seconds
     }
 }
 
 // Function to restart the client.js process
 function restartClientProcess() {
     console.log('Restarting client.js process...');
-    setTimeout(() => {
-        startClientProcess();
-    }, 5000);
+    setTimeout(initializeClientProcess, 30000);
 }
 
 // Function to restart the Discord client
 function restartDiscordClient() {
     console.log('Restarting Discord client...');
-    setTimeout(() => {
-        startDiscordClient();
-    }, 5000);
+    setTimeout(startDiscordClient, 30000); // Restart Discord client after 30 seconds
 }
-
-// Function to start gateway operations
-function startGateway() {
-    console.log('Starting gateway operations...');
-    startClientProcess();
-}
-
-// Function to restart the gateway on error
-async function restartGateway(reason) {
-    logEvent('Gateway', 'Restarting', `Restarting gateway due to: ${reason}`);
-    console.log(`Restarting gateway due to: ${reason}`);
-
-    if (clientProcess) {
-        clientProcess.kill('SIGINT');
-    }
-    if (gatewayClient) {
-        await gatewayClient.destroy();
-    }
-
-    setTimeout(() => {
-        startDiscordClient();
-    }, 10000);
-}
-
-// Initial Appwrite client initialization
-initializeAppwriteClient()
-    .then(client => {
-        appwriteClient = client;
-        startDiscordClient();
-    })
-    .catch(err => {
-        console.error('Failed to initialize Appwrite client:', err);
-        logEvent('Gateway', 'AppwriteInitializationError', err.message);
-    });
 
 // Global error handler for uncaught exceptions
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-    logEvent('Gateway', 'UncaughtException', err.message);
+process.on('uncaughtException', err => {
+    handleClientError('Gateway', 'UncaughtException', 'Uncaught Exception', err);
 });
+
+// Start the gateway by initializing Appwrite client and logging into Discord
+async function initializeAndStartGateway() {
+    try {
+        await initializeAppwriteClient();
+        await startDiscordClient();
+    } catch (error) {
+        handleClientError('Gateway', 'InitializationError', 'Failed to initialize Appwrite client or start Discord client', error);
+        process.exit(1); // Exit the process with an error code
+    }
+}
+
+function handleClientError(module, event, message, error) {
+    const errorMessage = error instanceof Error ? error.message : error;
+    logEvent(module, event, `${message}: ${errorMessage}`);
+    console.error(message, error);
+}
+
+initializeAndStartGateway();
+
+module.exports = { gatewayClient };

@@ -5,8 +5,7 @@ const { logEvent } = require('../shared/logger');
 // Function to initialize Appwrite client
 async function initializeAppwriteClient() {
     try {
-        const appwriteClient = new AppwriteClient();
-        appwriteClient
+        const appwriteClient = new AppwriteClient()
             .setEndpoint(config.appwrite.endpoint)
             .setProject(config.appwrite.projectId)
             .setKey(config.appwrite.apiKey);

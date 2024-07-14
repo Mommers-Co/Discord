@@ -4,7 +4,7 @@ const { MessageEmbed } = require('discord.js');
 const config = require('../config.json');
 const zlib = require('zlib');
 
-const logDirectory = path.join(__dirname, '..', 'logs');
+const logDirectory = path.join(__dirname, '..', 'logs', 'logger');
 const exportDirectory = path.join(logDirectory, 'exports');
 
 if (!fs.existsSync(logDirectory)) {
@@ -15,108 +15,110 @@ if (!fs.existsSync(exportDirectory)) {
     fs.mkdirSync(exportDirectory, { recursive: true });
 }
 
-function ensureLogFile(moduleName) {
-    const moduleLogDirectory = path.join(logDirectory, moduleName);
-    if (!fs.existsSync(moduleLogDirectory)) {
-        fs.mkdirSync(moduleLogDirectory, { recursive: true });
-    }
-    const logFilePath = path.join(moduleLogDirectory, `${moduleName}.log`);
+function ensureLogFile(logFileName) {
+    const logFilePath = path.join(logDirectory, `${logFileName}.log`);
     if (!fs.existsSync(logFilePath)) {
         fs.writeFileSync(logFilePath, '');
     }
 }
 
-function logEvent(moduleName, eventName, eventData) {
-    ensureLogFile(moduleName);
-    const logEntry = `[${new Date().toLocaleString()}] [${moduleName}] Event: ${eventName} ${JSON.stringify(eventData)}\n`;
+function logEvent(eventName, eventCategory, eventData) {
+    const logEntry = `[${new Date().toLocaleString()}] Event: ${eventName} (${eventCategory}) ${JSON.stringify(eventData)}\n`;
     console.log(logEntry);
-    appendLogToFile(moduleName, logEntry);
-    // Optionally send to Discord channel
-    sendLogToDiscord(moduleName, logEntry);
+    appendLogToFile('general', logEntry); // Default log file name
+    if (eventName.startsWith('ClientError')) {
+        sendLogToDiscord(logEntry, config.discord.consoleId);
+    } else {
+        sendLogToDiscord(logEntry, config.discord.logChannelId);
+    }
 }
 
-function appendLogToFile(moduleName, logEntry) {
-    const logFilePath = path.join(logDirectory, moduleName, `${moduleName}.log`);
-    fs.appendFile(logFilePath, logEntry, (err) => {
+function appendLogToFile(logFileName, logEntry) {
+    ensureLogFile(logFileName);
+    const logFilePath = path.join(logDirectory, `${logFileName}.log`);
+    fs.appendFile(logFilePath, logEntry, err => {
         if (err) {
-            console.error(`[${new Date().toLocaleString()}] Error writing to log file (${moduleName}): ${err}`);
+            console.error(`[${new Date().toLocaleString()}] Error writing to log file (${logFileName}): ${err}`);
+            logEvent('FileError', 'Error writing to log file', `(${logFileName}): ${err}`);
         }
     });
 }
 
-function sendLogToDiscord(moduleName, logEntry) {
-    const logChannelId = config.discord.logChannelId;
-    const gatewayClient = require('./gateway').client; // Import Discord client from gateway.js or client.js
-    
+function sendLogToDiscord(logEntry, channelId) {
+    const gatewayClient = require('../gateway/gateway').client || require('../client/client').client;
     if (gatewayClient) {
-        const logChannel = gatewayClient.channels.cache.get(logChannelId);
+        const logChannel = gatewayClient.channels.cache.get(channelId);
         if (logChannel) {
             logChannel.send(`\`\`\`${logEntry}\`\`\``)
                 .then(() => {
-                    console.log(`[${new Date().toLocaleString()}] Log entry sent to channel ${logChannelId}`);
+                    console.log(`[${new Date().toLocaleString()}] Log entry sent to channel ${channelId}`);
                 })
                 .catch(error => {
-                    console.error(`[${new Date().toLocaleString()}] Failed to send log entry: ${error}`);
+                    console.error(`[${new Date().toLocaleString()}] Failed to send log entry to channel ${channelId}: ${error}`);
+                    logEvent('DiscordError', 'Failed to send log entry', `to channel ${channelId}: ${error}`);
                 });
         } else {
-            console.error(`[${new Date().toLocaleString()}] Log channel ${logChannelId} not found.`);
+            console.error(`[${new Date().toLocaleString()}] Log channel ${channelId} not found.`);
+            logEvent('DiscordError', 'Log channel not found', channelId);
         }
     } else {
         console.error(`[${new Date().toLocaleString()}] Discord client not initialized.`);
+        logEvent('DiscordError', 'Discord client not initialized', null);
     }
 }
 
-function compressLogFile(moduleName) {
-    const logFilePath = path.join(logDirectory, moduleName, `${moduleName}.log`);
-    const compressedFilePath = path.join(logDirectory, moduleName, `${moduleName}.log.gz`);
+function compressLogFile(logFileName) {
+    const logFilePath = path.join(logDirectory, `${logFileName}.log`);
+    const compressedFilePath = path.join(exportDirectory, `${logFileName}.log.gz`);
     if (fs.existsSync(logFilePath)) {
         const gzip = zlib.createGzip();
         const input = fs.createReadStream(logFilePath);
         const output = fs.createWriteStream(compressedFilePath);
         input.pipe(gzip).pipe(output);
-        fs.truncate(logFilePath, 0, (err) => {
+        fs.truncate(logFilePath, 0, err => {
             if (err) {
-                console.error(`[${new Date().toLocaleString()}] Error truncating log file (${moduleName}) after compression: ${err}`);
+                console.error(`[${new Date().toLocaleString()}] Error truncating log file (${logFileName}) after compression: ${err}`);
+                logEvent('FileError', 'Error truncating log file after compression', `${logFileName}: ${err}`);
             }
         });
     } else {
-        console.error(`[${new Date().toLocaleString()}] Log file (${moduleName}.log) not found for compression.`);
+        console.error(`[${new Date().toLocaleString()}] Log file (${logFileName}.log) not found for compression.`);
+        logEvent('FileError', 'Log file not found for compression', `${logFileName}.log`);
     }
 }
 
-function exportLogsOnCrash(moduleName) {
-    process.on('uncaughtException', (err) => {
-        handleCrash(moduleName, err);
+function exportLogsOnCrash(logFileName) {
+    process.on('uncaughtException', err => {
+        handleCrash(logFileName, err);
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-        handleCrash(moduleName, reason);
+        handleCrash(logFileName, reason);
     });
 }
 
-function handleCrash(moduleName, error) {
+function handleCrash(logFileName, error) {
     const crashLogDirectory = path.join(logDirectory, 'crash_logs');
     if (!fs.existsSync(crashLogDirectory)) {
         fs.mkdirSync(crashLogDirectory, { recursive: true });
     }
-    const crashLogFilePath = path.join(crashLogDirectory, `${moduleName}_crash.log`);
-    const logFilePath = path.join(logDirectory, moduleName, `${moduleName}.log`);
+    const crashLogFilePath = path.join(crashLogDirectory, `${logFileName}_crash.log`);
+    const logFilePath = path.join(logDirectory, `${logFileName}.log`);
     let logContent = '';
     if (fs.existsSync(logFilePath)) {
         logContent = fs.readFileSync(logFilePath);
     } else {
-        console.error(`[${new Date().toLocaleString()}] Log file (${moduleName}.log) not found for crash export.`);
+        console.error(`[${new Date().toLocaleString()}] Log file (${logFileName}.log) not found for crash export.`);
+        logEvent('FileError', 'Log file not found for crash export', `${logFileName}.log`);
     }
     fs.writeFileSync(crashLogFilePath, logContent);
-    logEvent(moduleName, 'Crash', `Crash log exported to ${crashLogFilePath}`);
-    // Optionally send crash log to Discord
-    sendLogToDiscord(moduleName, `Crash log exported to ${crashLogFilePath}`);
+    logEvent('Crash', 'Crash log exported', crashLogFilePath);
+    sendLogToDiscord(`Crash log exported to ${crashLogFilePath}`, config.discord.logChannelId);
 }
 
 function sendStatusUpdate(client, statusMessage = 'Status update') {
     const channelId = config.discord.statusChannelId;
-    const gatewayClient = require('./gateway').client; // Import Discord client from gateway.js or client.js
-    
+    const gatewayClient = require('../gateway/gateway').client || require('../client/client').client;
     if (gatewayClient) {
         const channel = gatewayClient.channels.cache.get(channelId);
         if (channel) {
@@ -131,14 +133,16 @@ function sendStatusUpdate(client, statusMessage = 'Status update') {
                 })
                 .catch(error => {
                     console.error(`[${new Date().toLocaleString()}] Failed to send status update: ${error}`);
+                    logEvent('DiscordError', 'Failed to send status update', error);
                 });
         } else {
             console.error(`[${new Date().toLocaleString()}] Channel ${channelId} not found.`);
+            logEvent('DiscordError', 'Channel not found', channelId);
         }
     } else {
         console.error(`[${new Date().toLocaleString()}] Discord client not initialized.`);
+        logEvent('DiscordError', 'Discord client not initialized', null);
     }
 }
 
-// Export functions for use in other modules
 module.exports = { logEvent, sendStatusUpdate, compressLogFile, exportLogsOnCrash };
