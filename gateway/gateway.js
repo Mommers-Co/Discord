@@ -1,9 +1,9 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const { logEvent } = require('../shared/logger');
 const { fork } = require('child_process');
 const path = require('path');
 const config = require('../config.json');
-const { initializeAppwriteClient, getAppwriteClient } = require('./appwrite');
+const { initializeAppwriteClient } = require('./appwrite');
 
 console.log('Starting gateway...');
 
@@ -12,20 +12,25 @@ const gatewayIntents = [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContents
+    GatewayIntentBits.MessageContent
 ];
 
 const gatewayClient = new Client({ 
     intents: gatewayIntents,
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember, Partials.User],
     allowedMentions: { parse: ['users', 'roles'], repliedUser: true }
 });
 
 // Function to start the Discord client
 async function startDiscordClient() {
     try {
-        await gatewayClient.login(config.discord.clientToken);
+        await gatewayClient.login(config.discord.gatewayToken);
         logEvent('Gateway', 'Login', `Logged in as ${gatewayClient.user.tag}`);
         console.log(`Logged in as ${gatewayClient.user.tag}`);
+
+        // Add a delay here before initializing client.js process
+        await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds delay (adjust as needed)
+
         initializeClientProcess(); // Start client.js after Discord client is online
     } catch (error) {
         handleClientError('Gateway', 'LoginError', 'Failed to login', error);
@@ -37,7 +42,7 @@ async function startDiscordClient() {
 function initializeClientProcess() {
     try {
         console.log('Initializing client.js process...');
-        const clientProcess = fork(path.join(__dirname, '..', '..', 'client', 'client.js'));
+        const clientProcess = fork(path.join(__dirname, '..', 'client', 'client.js'));
 
         clientProcess.on('message', message => {
             if (message === 'ClientOnline') {

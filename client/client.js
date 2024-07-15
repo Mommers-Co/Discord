@@ -1,4 +1,4 @@
-const { Client, MessageEmbed, GatewayIntentBits } = require('discord.js');
+const { Client, MessageEmbed, GatewayIntentBits, Partials } = require('discord.js');
 const { logEvent } = require('../shared/logger');
 const config = require('../config.json');
 const { getAppwriteClient } = require('../gateway/appwrite');
@@ -24,16 +24,31 @@ process.on('message', message => {
 // Function to start the Discord client
 async function startDiscordClient() {
     try {
-        const intents = new GatewayIntentBits([
+        const intents = [
             GatewayIntentBits.Guilds,
             GatewayIntentBits.GuildMembers,
             GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContents
-        ]);
+            GatewayIntentBits.MessageContent,
+            GatewayIntentBits.DirectMessages
+        ];
 
         client = new Client({ 
             intents,
+            partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember, Partials.User],
             allowedMentions: { parse: ['users', 'roles'], repliedUser: true }
+        });
+
+        // Event: When the client is ready
+        client.once('ready', async () => {
+            console.log(`Logged in as ${client.user.tag}`);
+            logEvent('Client', 'Login', `Logged in as ${client.user.tag}`);
+            process.send('ClientOnline'); // Signal gateway.js that client is online
+
+            // Wait an additional 5 seconds to ensure client is fully ready
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Periodic check for unverified members
+            setInterval(checkUnverifiedMembers, 86400000);
         });
 
         // Event: When a member joins the server
@@ -145,54 +160,54 @@ async function startDiscordClient() {
             }
         });
 
-        // Check unverified members periodically
-        setInterval(() => {
-            if (!client.readyAt) {
-                console.log('Discord client not initialized. Waiting for client to be ready...');
-                return;
-            }
-
-            const currentTimestamp = Date.now();
-            memberJoinDates.forEach(async (joinDate, memberId) => {
-                try {
-                    const daysSinceJoin = Math.floor((currentTimestamp - joinDate.getTime()) / (1000 * 60 * 60 * 24));
-
-                    if (daysSinceJoin === ReminderDaysThreshold) {
-                        const memberToRemind = await client.guilds.cache.get(config.discord.guildId).members.fetch(memberId);
-                        if (memberToRemind) {
-                            const reminderMessage = new MessageEmbed()
-                                .setColor('#ff9900')
-                                .setTitle(`Reminder: Verify Your Account`)
-                                .setDescription(`Hello ${memberToRemind.user.username}, you have not verified your account yet. Please react with ✅ within the next ${KickDaysThreshold - ReminderDaysThreshold} days to avoid being kicked.`);
-
-                            await memberToRemind.send({ embeds: [reminderMessage] });
-                            logEvent('Verification', 'Reminder', `Sent reminder to ${memberToRemind.user.tag} to verify.`);
-                        }
-                    }
-
-                    if (daysSinceJoin >= KickDaysThreshold) {
-                        const guild = client.guilds.cache.get(config.discord.guildId);
-                        const memberToKick = guild.members.cache.get(memberId);
-                        if (memberToKick) {
-                            await memberToKick.kick('Failed to verify within the required time.');
-                            logEvent('Verification', 'Kick', `Kicked ${memberToKick.user.tag} for not verifying within ${KickDaysThreshold} days.`);
-                            memberJoinDates.delete(memberId);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error checking or kicking unverified members:', error);
-                }
-            });
-        }, 86400000);
-
-        client.login(config.discord.clientToken);
-        logEvent('Client', 'Login', `Logged in as ${client.user.tag}`);
-        console.log(`Logged in as ${client.user.tag}`);
-
-        process.send('ClientOnline'); // Signal gateway.js that client is online
+        await client.login(config.discord.clientToken);
     } catch (error) {
         handleClientError('Client', 'LoginError', 'Failed to login', error);
         process.send(`ClientError: ${error.message}`);
+    }
+}
+
+// Function to check and handle unverified members
+async function checkUnverifiedMembers() {
+    try {
+        if (!client.readyAt) {
+            console.log('Discord client not initialized. Waiting for client to be ready...');
+            return;
+        }
+
+        const currentTimestamp = Date.now();
+        memberJoinDates.forEach(async (joinDate, memberId) => {
+            try {
+                const daysSinceJoin = Math.floor((currentTimestamp - joinDate.getTime()) / (1000 * 60 * 60 * 24));
+
+                if (daysSinceJoin === ReminderDaysThreshold) {
+                    const memberToRemind = await client.guilds.cache.get(config.discord.guildId).members.fetch(memberId);
+                    if (memberToRemind) {
+                        const reminderMessage = new MessageEmbed()
+                            .setColor('#ff9900')
+                            .setTitle(`Reminder: Verify Your Account`)
+                            .setDescription(`Hello ${memberToRemind.user.username}, you have not verified your account yet. Please react with ✅ within the next ${KickDaysThreshold - ReminderDaysThreshold} days to avoid being kicked.`);
+
+                        await memberToRemind.send({ embeds: [reminderMessage] });
+                        logEvent('Verification', 'Reminder', `Sent reminder to ${memberToRemind.user.tag} to verify.`);
+                    }
+                }
+
+                if (daysSinceJoin >= KickDaysThreshold) {
+                    const guild = client.guilds.cache.get(config.discord.guildId);
+                    const memberToKick = guild.members.cache.get(memberId);
+                    if (memberToKick) {
+                        await memberToKick.kick('Failed to verify within the required time.');
+                        logEvent('Verification', 'Kick', `Kicked ${memberToKick.user.tag} for not verifying within ${KickDaysThreshold} days.`);
+                        memberJoinDates.delete(memberId);
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking or kicking unverified members:', error);
+            }
+        });
+    } catch (error) {
+        console.error('Error in checkUnverifiedMembers function:', error);
     }
 }
 
@@ -203,12 +218,4 @@ function handleClientError(module, event, message, error) {
     console.error(message, error);
 }
 
-// Function to get the Appwrite client
-function getAppwriteClient() {
-    if (!appwriteClient) {
-        throw new Error('Appwrite client is not initialized.');
-    }
-    return appwriteClient;
-}
-
-module.exports = { startDiscordClient, getAppwriteClient };
+module.exports = { getAppwriteClient }; // Ensure correct exports
