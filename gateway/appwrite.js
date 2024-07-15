@@ -1,21 +1,27 @@
+// appwrite.js
 const { Appwrite } = require('appwrite');
-const config = require('../config.json'); // Adjust the path as needed
+const config = require('../config.json');
 
 let appwriteClient;
 
 function initializeAppwriteClient() {
-    appwriteClient = new Appwrite();
+    try {
+        appwriteClient = new Appwrite();
 
-    // Read configuration from config.json
-    const { endpoint, projectId, apiKey } = config.appwrite;
+        // Read configuration from config.json
+        const { endpoint, projectId, apiKey } = config.appwrite;
 
-    // Set endpoint, project ID, and API key
-    appwriteClient
-        .setEndpoint(endpoint)
-        .setProject(projectId)
-        .setKey(apiKey);
+        // Set endpoint, project ID, and API key
+        appwriteClient
+            .setEndpoint(endpoint)
+            .setProject(projectId)
+            .setKey(apiKey);
 
-    return appwriteClient;
+        console.log('Appwrite client initialized');
+    } catch (error) {
+        console.error('Failed to initialize Appwrite client:', error);
+        throw error; // Throw error for better error handling in client.js
+    }
 }
 
 function getAppwriteClient() {

@@ -1,3 +1,4 @@
+// logger.js
 const fs = require('fs');
 const path = require('path');
 const { MessageEmbed } = require('discord.js');
@@ -45,9 +46,9 @@ function appendLogToFile(logFileName, logEntry) {
 }
 
 function sendLogToDiscord(logEntry, channelId) {
-    const gatewayClient = require('../gateway/gateway').client || require('../client/client').client;
-    if (gatewayClient) {
-        const logChannel = gatewayClient.channels.cache.get(channelId);
+    const { client } = require('../client/client'); // require client at the point of use
+    if (client) {
+        const logChannel = client.channels.cache.get(channelId);
         if (logChannel) {
             logChannel.send(`\`\`\`${logEntry}\`\`\``)
                 .then(() => {
@@ -116,39 +117,5 @@ function handleCrash(logFileName, error) {
     sendLogToDiscord(`Crash log exported to ${crashLogFilePath}`, config.discord.logChannelId);
 }
 
-function sendStatusUpdate(client, statusMessage = 'Status update') {
-    const channelId = config.discord.statusChannelId;
-    const gatewayClient = require('../gateway/gateway').client || require('../client/client').client;
-    if (gatewayClient) {
-        const channel = gatewayClient.channels.cache.get(channelId);
-        if (channel) {
-            const embed = new MessageEmbed()
-                .setColor('#0099ff')
-                .setTitle('Server Status Update')
-                .setDescription(statusMessage)
-                .setTimestamp();
-            channel.send({ embeds: [embed] })
-                .then(() => {
-                    console.log(`[${new Date().toLocaleString()}] Status update sent to channel ${channelId}`);
-                })
-                .catch(error => {
-                    console.error(`[${new Date().toLocaleString()}] Failed to send status update: ${error}`);
-                    logEvent('DiscordError', 'Failed to send status update', error);
-                });
-        } else {
-            console.error(`[${new Date().toLocaleString()}] Channel ${channelId} not found.`);
-            logEvent('DiscordError', 'Channel not found', channelId);
-        }
-    } else {
-        console.error(`[${new Date().toLocaleString()}] Discord client not initialized.`);
-        logEvent('DiscordError', 'Discord client not initialized', null);
-    }
-}
+module.exports = { logEvent, compressLogFile, exportLogsOnCrash };
 
-function handleClientError(moduleName, errorCategory, errorMessage, error) {
-    const formattedError = `[${new Date().toLocaleString()}] ${moduleName} Error (${errorCategory}): ${errorMessage}\n${error ? error.stack || error.message || error.toString() : 'Unknown Error'}`;
-    console.error(formattedError);
-    logEvent(`${moduleName}Error`, `${errorCategory}`, formattedError);
-}
-
-module.exports = { logEvent, sendStatusUpdate, compressLogFile, exportLogsOnCrash, handleClientError };
