@@ -1,11 +1,11 @@
 {
-  "name": "discord",
+  "name": "Mommers Co | Discord Bot",
   "version": "1.0.0",
-  "main": "gateway/gateway.js",
+  "main": "client/client.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon gateway/gateway.js",
-    "start": "node gateway/gateway.js"
+    "dev": "nodemon client/client.js",
+    "start": "node client/client.js"
   },
   "repository": {
     "type": "git",

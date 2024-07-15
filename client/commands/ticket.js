@@ -1,7 +1,6 @@
 // /Discord/commands/ticket.js
 const { Client, MessageEmbed } = require('discord.js');
-const { logEvent } = require('../shared/logger');
-const { getAppwriteClient } = require('../gateway/appwrite');
+const { logEvent, getAppwriteClient } = require('../shared/logger');
 const config = require('../config.json');
 
 // Initialize Appwrite client
@@ -19,7 +18,7 @@ module.exports = {
         }
 
         try {
-            const response = await appwriteClient.database.createDocument('tickets', 'unique()', {
+            const response = await appwriteClient.database.createDocument(config.appwrite.ticketSystem.ticketsCollectionId, 'unique()', {
                 userId,
                 content,
                 status: 'open',

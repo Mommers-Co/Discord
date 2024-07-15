@@ -145,4 +145,10 @@ function sendStatusUpdate(client, statusMessage = 'Status update') {
     }
 }
 
-module.exports = { logEvent, sendStatusUpdate, compressLogFile, exportLogsOnCrash };
+function handleClientError(moduleName, errorCategory, errorMessage, error) {
+    const formattedError = `[${new Date().toLocaleString()}] ${moduleName} Error (${errorCategory}): ${errorMessage}\n${error ? error.stack || error.message || error.toString() : 'Unknown Error'}`;
+    console.error(formattedError);
+    logEvent(`${moduleName}Error`, `${errorCategory}`, formattedError);
+}
+
+module.exports = { logEvent, sendStatusUpdate, compressLogFile, exportLogsOnCrash, handleClientError };

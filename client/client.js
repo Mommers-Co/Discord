@@ -1,68 +1,66 @@
 const { Client, MessageEmbed, GatewayIntentBits, Partials } = require('discord.js');
-const { logEvent } = require('../shared/logger');
-const config = require('../config.json');
-const { getAppwriteClient } = require('../gateway/appwrite');
+const { fork } = require('child_process');
+const path = require('path');
+const config = require('./config.json');
+const { initializeAppwriteClient } = require('./appwrite');
+const { getAppwriteClient } = require('./gateway/appwrite');
+const { logEvent } = require('./shared/logger');
 
 const RoleID = config.roles.memberId;
 const WelcomeChannelID = config.channels.welcomeChannelId;
 const KickDaysThreshold = 10;
 const ReminderDaysThreshold = 7;
 
-let client;
+let gatewayClient;
 let appwriteClient;
 let memberJoinDates = new Map();
 
-console.log('Waiting for start signal from gateway...');
+console.log('Starting bot...');
 
-// Listen for start signal from gateway.js
-process.on('message', message => {
-    if (message === 'StartClient') {
-        startDiscordClient();
-    }
+// Initialize Discord client
+const gatewayIntents = [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+];
+
+const botIntents = [
+    ...gatewayIntents,
+    GatewayIntentBits.DirectMessages // Include all necessary intents
+];
+
+const botClient = new Client({ 
+    intents: botIntents,
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember, Partials.User],
+    allowedMentions: { parse: ['users', 'roles'], repliedUser: true }
 });
 
 // Function to start the Discord client
-async function startDiscordClient() {
+async function startBotClient() {
     try {
-        const intents = [
-            GatewayIntentBits.Guilds,
-            GatewayIntentBits.GuildMembers,
-            GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContent,
-            GatewayIntentBits.DirectMessages
-        ];
+        await botClient.login(config.discord.botToken);
+        logEvent('Bot', 'Login', `Logged in as ${botClient.user.tag}`);
+        console.log(`Logged in as ${botClient.user.tag}`);
 
-        client = new Client({ 
-            intents,
-            partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember, Partials.User],
-            allowedMentions: { parse: ['users', 'roles'], repliedUser: true }
-        });
+        await initializeAppwriteClient(); // Initialize Appwrite client
 
-        // Event: When the client is ready
-        client.once('ready', async () => {
-            console.log(`Logged in as ${client.user.tag}`);
-            logEvent('Client', 'Login', `Logged in as ${client.user.tag}`);
-            process.send('ClientOnline'); // Signal gateway.js that client is online
-
-            // Wait an additional 5 seconds to ensure client is fully ready
-            await new Promise(resolve => setTimeout(resolve, 5000));
+        // Event: When the bot is ready
+        botClient.once('ready', async () => {
+            console.log(`Bot ready as ${botClient.user.tag}`);
+            logEvent('Bot', 'Ready', `Bot ready as ${botClient.user.tag}`);
 
             // Periodic check for unverified members
             setInterval(checkUnverifiedMembers, 86400000);
         });
 
         // Event: When a member joins the server
-        client.on('guildMemberAdd', async member => {
+        botClient.on('guildMemberAdd', async member => {
             try {
-                if (!client.readyAt) {
-                    console.log('Discord client not initialized. Waiting for client to be ready...');
-                    return;
-                }
-
                 const joinedAt = member.joinedAt;
                 memberJoinDates.set(member.id, joinedAt);
 
-                const welcomeChannel = await client.channels.fetch(WelcomeChannelID);
+                const welcomeChannel = await botClient.channels.fetch(WelcomeChannelID);
                 if (welcomeChannel && welcomeChannel.isText()) {
                     const welcomeMessage = new MessageEmbed()
                         .setColor('#0099ff')
@@ -98,16 +96,11 @@ async function startDiscordClient() {
         });
 
         // Event: When a member leaves the server
-        client.on('guildMemberRemove', async member => {
+        botClient.on('guildMemberRemove', async member => {
             try {
-                if (!client.readyAt) {
-                    console.log('Discord client not initialized. Waiting for client to be ready...');
-                    return;
-                }
-
                 // Update Appwrite database to mark user as inactive or left
                 const appwrite = getAppwriteClient();
-                const usersCollection = appwrite.database.collection('users');
+                const usersCollection = appwrite.database.collection(config.appwrite.discordDatabase.usersCollectionId);
                 const result = await usersCollection.updateDocument(member.id, {
                     active: false,
                     lastAction: 'Left the server',
@@ -121,16 +114,11 @@ async function startDiscordClient() {
         });
 
         // Event: When a member rejoins the server
-        client.on('guildMemberAdd', async member => {
+        botClient.on('guildMemberAdd', async member => {
             try {
-                if (!client.readyAt) {
-                    console.log('Discord client not initialized. Waiting for client to be ready...');
-                    return;
-                }
-
                 // Check if user already exists in Appwrite, update if exists, create new if not
                 const appwrite = getAppwriteClient();
-                const usersCollection = appwrite.database.collection('users');
+                const usersCollection = appwrite.database.collection(config.appwrite.discordDatabase.usersCollectionId);
                 const existingUser = await usersCollection.getDocument(member.id);
 
                 if (existingUser) {
@@ -160,28 +148,21 @@ async function startDiscordClient() {
             }
         });
 
-        await client.login(config.discord.clientToken);
     } catch (error) {
-        handleClientError('Client', 'LoginError', 'Failed to login', error);
-        process.send(`ClientError: ${error.message}`);
+        handleClientError('Bot', 'LoginError', 'Failed to login', error);
     }
 }
 
 // Function to check and handle unverified members
 async function checkUnverifiedMembers() {
     try {
-        if (!client.readyAt) {
-            console.log('Discord client not initialized. Waiting for client to be ready...');
-            return;
-        }
-
         const currentTimestamp = Date.now();
         memberJoinDates.forEach(async (joinDate, memberId) => {
             try {
                 const daysSinceJoin = Math.floor((currentTimestamp - joinDate.getTime()) / (1000 * 60 * 60 * 24));
 
                 if (daysSinceJoin === ReminderDaysThreshold) {
-                    const memberToRemind = await client.guilds.cache.get(config.discord.guildId).members.fetch(memberId);
+                    const memberToRemind = await botClient.guilds.cache.get(config.discord.guildId).members.fetch(memberId);
                     if (memberToRemind) {
                         const reminderMessage = new MessageEmbed()
                             .setColor('#ff9900')
@@ -194,7 +175,7 @@ async function checkUnverifiedMembers() {
                 }
 
                 if (daysSinceJoin >= KickDaysThreshold) {
-                    const guild = client.guilds.cache.get(config.discord.guildId);
+                    const guild = botClient.guilds.cache.get(config.discord.guildId);
                     const memberToKick = guild.members.cache.get(memberId);
                     if (memberToKick) {
                         await memberToKick.kick('Failed to verify within the required time.');
@@ -211,11 +192,18 @@ async function checkUnverifiedMembers() {
     }
 }
 
-// Function to handle client errors
-function handleClientError(module, event, message, error) {
-    const errorMessage = error instanceof Error ? error.message : error;
-    logEvent(module, event, `${message}: ${errorMessage}`);
-    console.error(message, error);
+// Global error handler for uncaught exceptions
+process.on('uncaughtException', err => {
+    handleClientError('Bot', 'UncaughtException', 'Uncaught Exception', err);
+});
+
+// Start the bot by initializing everything
+async function initializeAndStartBot() {
+    try {
+        await startBotClient(); // Start Discord bot client
+    } catch (error) {
+        handleClientError('Bot', 'StartError', 'Failed to start bot', error);
+    }
 }
 
-module.exports = { getAppwriteClient }; // Ensure correct exports
+initializeAndStartBot();
