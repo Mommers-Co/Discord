@@ -9,9 +9,11 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessageReactions,
+        GatewayIntentBits.GuildMessageReactions
     ], 
-    partials: [Partials.Channel] 
+    partials: [Partials.Channel, Partials.Message, Partials.Reaction] // Ensure partials are included for messages and reactions
 });
 
 client.once('ready', () => {
@@ -29,6 +31,7 @@ client.on('guildMemberAdd', async (member) => {
 
     try {
         const dmChannel = await member.createDM();
+        logEvent('DM Channel Created', 'MemberEvent', { user: member.user.tag });
 
         // DM message to the new member
         const dmEmbed = new EmbedBuilder()
@@ -39,6 +42,7 @@ client.on('guildMemberAdd', async (member) => {
 
         verificationMessage = await dmChannel.send({ embeds: [dmEmbed] });
         await verificationMessage.react('✅'); // React with the verification emoji
+        logEvent('Verification DM Sent', 'MemberEvent', { user: member.user.tag });
 
         const filter = (reaction, user) => {
             return reaction.emoji.name === '✅' && user.id === member.id;
@@ -56,6 +60,7 @@ client.on('guildMemberAdd', async (member) => {
                     .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
                 await dmChannel.send({ embeds: [reminderEmbed] });
+                logEvent('1st Verification Reminder Sent', 'MemberEvent', { user: member.user.tag });
             }
         });
 
@@ -69,6 +74,7 @@ client.on('guildMemberAdd', async (member) => {
                     .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
                 await dmChannel.send({ embeds: [finalReminderEmbed] });
+                logEvent('2nd Verification Reminder Sent', 'MemberEvent', { user: member.user.tag });
             }
         });
 
@@ -91,7 +97,11 @@ client.on('guildMemberAdd', async (member) => {
             }
         });
 
-        collector.on('collect', async () => {
+        collector.on('collect', async (reaction, user) => {
+            if (user.id !== member.id) return;
+            
+            logEvent('Verification DM Verified', 'MemberEvent', { user: member.user.tag });
+
             // Verification successful
             try {
                 await addUserToDatabase({
@@ -101,15 +111,16 @@ client.on('guildMemberAdd', async (member) => {
                     verifiedStatus: true,
                     verificationDate: new Date().toISOString(),
                     lastActive: new Date().toISOString(),
-                    roles: JSON.stringify(member.roles.cache.map(role => role.id)),
+                    roles: member.roles.cache.map(role => role.id),
                     warnings: 0,
                     bans: 0,
                     lastAction: null,
                     notes: '',
-                    ticketIds: JSON.stringify([]),
+                    ticketIds: [],
                     discordCreation: member.user.createdAt.toISOString(),
-                    registeredEmail: 'N/A' // Replace with actual email if available
                 });
+
+                logEvent('User added to database', 'MemberEvent', { user: member.user.tag });
 
                 // Ensure the member role is added
                 if (!member.roles.cache.has(config.roles.memberRoleId)) {
