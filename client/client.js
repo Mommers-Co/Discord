@@ -22,35 +22,13 @@ client.once('ready', () => {
 
 client.on('guildMemberAdd', async (member) => {
     logEvent('New member joined', 'MemberEvent', { user: member.user.tag });
-    
-    let reminderJobs = [];
+
     let verificationMessage;
-    const reminderInterval = 24 * 60 * 60 * 1000; // 24 hours
+    const sixHours = 6 * 60 * 60 * 1000; // 6 hours
+    const finalReminderInterval = 1 * 60 * 60 * 1000; // 1 hour
 
     try {
         const dmChannel = await member.createDM();
-        const welcomeChannelId = config.channels.mainEntranceChannelId;
-
-        if (!welcomeChannelId) {
-            throw new Error('Welcome channel ID is not defined in config.json.');
-        }
-
-        const welcomeChannel = await client.channels.fetch(welcomeChannelId);
-
-        // Welcome message for the new member
-        if (welcomeChannel) {
-            const welcomeTimestamp = new Date().toLocaleString();
-            const embed = new EmbedBuilder()
-                .setColor('#D08770')
-                .setTitle('Welcome to Our Server!')
-                .setDescription(`We are excited to have you here, ${member.username}! To get started, please verify your account by reacting to the direct message.`)
-                .setFooter({ text: `User ID: ${member.id} | Timestamp: ${welcomeTimestamp}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
-
-            await welcomeChannel.send({ embeds: [embed] });
-        } else {
-            console.error(`[${new Date().toLocaleString()}] Welcome channel ${welcomeChannelId} not found.`);
-            logEvent('DiscordError', 'Welcome channel not found', welcomeChannelId);
-        }
 
         // DM message to the new member
         const dmEmbed = new EmbedBuilder()
@@ -67,6 +45,51 @@ client.on('guildMemberAdd', async (member) => {
         };
 
         const collector = verificationMessage.createReactionCollector({ filter, time: 7 * 24 * 60 * 60 * 1000 }); // 7 days
+
+        // Schedule first reminder after 6 hours
+        const firstReminder = schedule.scheduleJob(Date.now() + sixHours, async () => {
+            if (!member.roles.cache.has(config.roles.memberRoleId)) {
+                const reminderEmbed = new EmbedBuilder()
+                    .setColor('#D08770')
+                    .setTitle('Reminder: Verify Your Account')
+                    .setDescription(`Please verify your account by reacting with ✅ to the verification message. You have 6 hours left to complete the verification process.`)
+                    .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
+
+                await dmChannel.send({ embeds: [reminderEmbed] });
+            }
+        });
+
+        // Schedule final reminder 6 hours after the first reminder
+        const finalReminder = schedule.scheduleJob(Date.now() + 2 * sixHours, async () => {
+            if (!member.roles.cache.has(config.roles.memberRoleId)) {
+                const finalReminderEmbed = new EmbedBuilder()
+                    .setColor('#D08770')
+                    .setTitle('Final Reminder: Verify Your Account')
+                    .setDescription('This is your final reminder to verify your account by reacting with ✅ to the verification message. Failure to do so will result in removal from the server.')
+                    .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
+
+                await dmChannel.send({ embeds: [finalReminderEmbed] });
+            }
+        });
+
+        // Schedule kick if no verification within 1 hour after final reminder
+        schedule.scheduleJob(Date.now() + 3 * sixHours, async () => {
+            if (!member.roles.cache.has(config.roles.memberRoleId)) {
+                await member.kick('Verification not completed within the given time');
+                logEvent('Member kicked due to non-verification', 'MemberEvent', { user: member.user.tag });
+
+                const kickEmbed = new EmbedBuilder()
+                    .setColor('#D08770')
+                    .setTitle('Member Removed')
+                    .setDescription(`${member.user.tag} was removed from the server due to failure to verify their account.`)
+                    .setFooter({ text: `User ID: ${member.id}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
+
+                const leaveChannel = await client.channels.fetch(config.channels.mainEntranceChannelId);
+                if (leaveChannel) {
+                    await leaveChannel.send({ embeds: [kickEmbed] });
+                }
+            }
+        });
 
         collector.on('collect', async () => {
             // Verification successful
@@ -93,21 +116,32 @@ client.on('guildMemberAdd', async (member) => {
                     await member.roles.add(config.roles.memberRoleId);
                     logEvent('Member verified and role added', 'MemberEvent', { user: member.user.tag });
 
-                    // Send a thank you message
-                    const thankYouEmbed = new EmbedBuilder()
-                        .setColor('#D08770')
-                        .setTitle('Verification Complete!')
-                        .setDescription(`Thank you for verifying your account, ${member.user.tag}! You now have access to the Mommers Co Discord.`)
-                        .setFooter({ text: `User ID: ${member.id}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
+                    // Send a thank you message in the welcome channel
+                    const welcomeChannelId = config.channels.mainEntranceChannelId;
 
-                    await dmChannel.send({ embeds: [thankYouEmbed] });
+                    if (!welcomeChannelId) {
+                        throw new Error('Welcome channel ID is not defined in config.json.');
+                    }
+
+                    const welcomeChannel = await client.channels.fetch(welcomeChannelId);
+                    if (welcomeChannel) {
+                        const welcomeEmbed = new EmbedBuilder()
+                            .setColor('#D08770')
+                            .setTitle('Welcome to Our Server!')
+                            .setDescription(`Congratulations ${member.user.tag}, you have been verified and have been granted access to the server!`)
+                            .setFooter({ text: `User ID: ${member.id}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
+
+                        await welcomeChannel.send({ content: `<@${member.id}>`, embeds: [welcomeEmbed] });
+                    } else {
+                        console.error(`[${new Date().toLocaleString()}] Welcome channel ${welcomeChannelId} not found.`);
+                        logEvent('DiscordError', 'Welcome channel not found', welcomeChannelId);
+                    }
                 }
 
-                // Stop the collector
+                // Stop the collector and cancel all scheduled jobs
                 collector.stop('verified');
-
-                // Clear all reminder jobs
-                reminderJobs.forEach(job => job.cancel());
+                firstReminder.cancel();
+                finalReminder.cancel();
             } catch (error) {
                 logEvent('Error adding user to Appwrite', 'Error', error.message);
             }
@@ -119,46 +153,11 @@ client.on('guildMemberAdd', async (member) => {
                 logEvent('Member kicked due to non-verification', 'MemberEvent', { user: member.user.tag });
             }
         });
-/*
-        // Schedule reminders correctly
-        const reminderJob = (day) => {
-            const jobStart = Date.now() + day * reminderInterval;
-            const job = schedule.scheduleJob({ start: jobStart, end: jobStart + reminderInterval }, async () => {
-                if (!member.roles.cache.has(config.roles.memberRoleId)) {
-                    const reminderEmbed = new EmbedBuilder()
-                        .setColor('#D08770')
-                        .setTitle('Reminder: Verify Your Account')
-                        .setDescription(`Please verify your account by reacting with ✅ to the verification message. You have ${7 - day} day${7 - day > 1 ? 's' : ''} left to complete the verification process.`)
-                        .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
-                    await dmChannel.send({ embeds: [reminderEmbed] });
-                }
-            });
-
-            reminderJobs.push(job);
-        };
-
-        for (let i = 1; i <= 6; i++) {
-            reminderJob(i);
-        }
-
-        // Final reminder on the 7th day
-        schedule.scheduleJob({ start: Date.now() + 7 * reminderInterval }, async () => {
-            if (!member.roles.cache.has(config.roles.memberRoleId)) {
-                const finalReminderEmbed = new EmbedBuilder()
-                    .setColor('#D08770')
-                    .setTitle('Final Reminder: Verify Your Account')
-                    .setDescription('This is your final reminder to verify your account by reacting with ✅ to the verification message. Failure to do so will result in removal from the server.')
-                    .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
-
-                await dmChannel.send({ embeds: [finalReminderEmbed] });
-            }
-        });
     } catch (error) {
         logEvent('Error handling new member', 'Error', error.message);
     }
 });
-*/
 
 client.on('guildMemberRemove', async (member) => {
     const leaveTimestamp = new Date().toLocaleString();
