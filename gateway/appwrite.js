@@ -1,28 +1,46 @@
 require('dotenv').config();
-const { Client, Databases } = require('appwrite');
+const sdk = require('node-appwrite');
+
+const client = new sdk.Client();
+const databases = new sdk.Databases(client);
+
 const config = require('../config.json'); // Update the path as necessary
 
-const client = new Client()
-    .setEndpoint(config.appwrite.endpoint) // Ensure this is correctly set
-    .setProject(config.appwrite.projectId)
+// Initialize the Appwrite client
+client
+    .setEndpoint(config.appwrite.endpoint) // Your Appwrite endpoint
+    .setProject(config.appwrite.projectId) // Your Appwrite project ID
+    .setKey(config.appwrite.apiKey); // Your Appwrite API key
 
-const databases = new Databases(client);
-
+// Define the function to add a user to the database
 const addUserToDatabase = async (user) => {
     try {
-        await databases.createDocument(
-            config.appwrite.discordDatabase.discordDatabaseId,
-            config.appwrite.discordDatabase.usersCollectionId, // Specify the collection ID here
-            'unique()', // Generate a unique ID for the document
+        // Create a document in the usersCollectionId
+        const response = await databases.createDocument(
+            config.appwrite.databaseId, // Your database ID
+            config.appwrite.usersCollectionId, // Your collection ID
+            user.discordUserId, // Document ID (using discordUserId here)
             {
-                email: user.email,
+                discordUserId: user.discordUserId,
                 username: user.username,
-                discordId: user.discordId,
-                joinedAt: new Date().toISOString()
+                JoinedAt: user.JoinedAt,
+                verifiedStatus: user.verifiedStatus,
+                verificationDate: user.verificationDate,
+                lastActive: user.lastActive,
+                roles: user.roles,
+                warnings: user.warnings,
+                bans: user.bans,
+                lastAction: user.lastAction,
+                notes: user.notes,
+                ticketIds: user.ticketIds,
+                discordCreation: user.discordCreation,
+                registeredEmail: user.registeredEmail
             }
         );
+        return response;
     } catch (error) {
-        console.error('Error adding user to database:', error);
+        console.error('Error adding user to Appwrite:', error);
+        throw error;
     }
 };
 

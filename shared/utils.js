@@ -1,5 +1,5 @@
 // utils.js
-const { MessageEmbed } = require('discord.js');
+const { EmbedBuilder  } = require('discord.js');
 const config = require('../config.json');
 
 // Function to send status update to Discord channel
@@ -10,7 +10,7 @@ function sendStatusUpdate(client, statusMessage = 'Status update') {
         const channel = client.channels.cache.get(channelId);
 
         if (channel) {
-            const embed = new MessageEmbed()
+            const embed = new EmbedBuilder ()
                 .setColor('#0099ff')
                 .setTitle('Gateway Status Update')
                 .setDescription(statusMessage)
@@ -23,7 +23,7 @@ function sendStatusUpdate(client, statusMessage = 'Status update') {
             console.error(`[${new Date().toLocaleString()}] Channel ${channelId} not found.`);
         }
     } else {
-        console.error(`[${new Date().toLocaleString()}] Discord client not initialized.`);
+        console.error(`[${new Date().toLocaleString()}] Status client not initialized.`);
     }
 }
 

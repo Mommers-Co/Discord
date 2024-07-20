@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const { MessageBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const config = require('../config.json');
 const zlib = require('zlib');
-const { client } = require('../client/client'); // Adjusted import for client
+const { client } = require('../client/client');
 
 const logDirectory = path.join(__dirname, '..', 'logs');
 const exportDirectory = path.join(logDirectory, 'exports');
@@ -51,35 +51,42 @@ function appendLogToFile(logFileName, logEntry) {
     });
 }
 
-function sendLogToDiscord(logEntry, channelId) {
-    if (client) {
-        const currentTimestamp = Date.now();
-        const lastSentTimestamp = DISCORD_MESSAGES_SENT.get(channelId) || 0;
-
-        if (currentTimestamp - lastSentTimestamp < RATE_LIMIT_INTERVAL) {
-            console.warn(`[${new Date().toLocaleString()}] Rate limit reached for channel ${channelId}. Skipping message.`);
-            return;
-        }
-
-        DISCORD_MESSAGES_SENT.set(channelId, currentTimestamp);
-
-        const logChannel = client.channels.cache.get(channelId);
-        if (logChannel) {
-            logChannel.send(`\`\`\`${logEntry}\`\`\``)
-                .then(() => {
-                    console.log(`[${new Date().toLocaleString()}] Log entry sent to channel ${channelId}`);
-                })
-                .catch(error => {
-                    console.error(`[${new Date().toLocaleString()}] Failed to send log entry to channel ${channelId}: ${error}`);
-                    logEvent('DiscordError', 'Failed to send log entry', `to channel ${channelId}: ${error}`);
-                });
-        } else {
-            console.error(`[${new Date().toLocaleString()}] Log channel ${channelId} not found.`);
-            logEvent('DiscordError', 'Log channel not found', channelId);
-        }
-    } else {
+function sendLogToDiscord(logEntry, channelId = config.discord.discordConsoleId) {
+    if (!client || !client.isReady()) {
         console.error(`[${new Date().toLocaleString()}] Discord client not initialized.`);
         logEvent('DiscordError', 'Discord client not initialized', null);
+        return;
+    }
+
+    const currentTimestamp = Date.now();
+    const lastSentTimestamp = DISCORD_MESSAGES_SENT.get(channelId) || 0;
+
+    if (currentTimestamp - lastSentTimestamp < RATE_LIMIT_INTERVAL) {
+        console.warn(`[${new Date().toLocaleString()}] Rate limit reached for channel ${channelId}. Skipping message.`);
+        return;
+    }
+
+    DISCORD_MESSAGES_SENT.set(channelId, currentTimestamp);
+
+    const logChannel = client.channels.cache.get(channelId);
+    if (logChannel) {
+        const embed = new EmbedBuilder()
+            .setTitle('Log Entry')
+            .setDescription(`\`\`\`${logEntry}\`\`\``)
+            .setColor('#0099ff')
+            .setTimestamp();
+
+        logChannel.send({ embeds: [embed] })
+            .then(() => {
+                console.log(`[${new Date().toLocaleString()}] Log entry sent to channel ${channelId}`);
+            })
+            .catch(error => {
+                console.error(`[${new Date().toLocaleString()}] Failed to send log entry to channel ${channelId}: ${error}`);
+                logEvent('DiscordError', 'Failed to send log entry', `to channel ${channelId}: ${error}`);
+            });
+    } else {
+        console.error(`[${new Date().toLocaleString()}] Log channel ${channelId} not found.`);
+        logEvent('DiscordError', 'Log channel not found', channelId);
     }
 }
 
