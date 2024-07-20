@@ -43,7 +43,7 @@ client.on('guildMemberAdd', async (member) => {
             const embed = new EmbedBuilder()
                 .setColor('#D08770')
                 .setTitle('Welcome to Our Server!')
-                .setDescription(`We are excited to have you here, ${member.user.tag}! To get started, please verify your account by reacting to the direct message.`)
+                .setDescription(`We are excited to have you here, ${member.username}! To get started, please verify your account by reacting to the direct message.`)
                 .setFooter({ text: `User ID: ${member.id} | Timestamp: ${welcomeTimestamp}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
             await welcomeChannel.send({ embeds: [embed] });
@@ -119,7 +119,7 @@ client.on('guildMemberAdd', async (member) => {
                 logEvent('Member kicked due to non-verification', 'MemberEvent', { user: member.user.tag });
             }
         });
-
+/*
         // Schedule reminders correctly
         const reminderJob = (day) => {
             const jobStart = Date.now() + day * reminderInterval;
@@ -158,6 +158,7 @@ client.on('guildMemberAdd', async (member) => {
         logEvent('Error handling new member', 'Error', error.message);
     }
 });
+*/
 
 client.on('guildMemberRemove', async (member) => {
     const leaveTimestamp = new Date().toLocaleString();
