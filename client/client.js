@@ -135,14 +135,15 @@ client.on('guildMemberAdd', async (member) => {
                     }
 
                     const welcomeChannel = await client.channels.fetch(welcomeChannelId);
+                    const joinTimestamp = new Date().toLocaleString();
                     if (welcomeChannel) {
                         const welcomeEmbed = new EmbedBuilder()
                             .setColor('#D08770')
                             .setTitle('Welcome to Our Server!')
-                            .setDescription(`Congratulations ${member.user.tag}, you have been verified and have been granted access to the server!`)
-                            .setFooter({ text: `User ID: ${member.id}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
+                            .setDescription(`<@${member.id}>, you've have been granted access to the server!`)
+                            .setFooter({ text: `User ID: ${member.id} | Timestamp: ${joinTimestamp}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
-                        await welcomeChannel.send({ content: `<@${member.id}>`, embeds: [welcomeEmbed] });
+                        await welcomeChannel.send({ embeds: [welcomeEmbed] });
                     } else {
                         console.error(`[${new Date().toLocaleString()}] Welcome channel ${welcomeChannelId} not found.`);
                         logEvent('DiscordError', 'Welcome channel not found', welcomeChannelId);
