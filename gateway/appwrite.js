@@ -1,34 +1,29 @@
-// appwrite.js
-const { Appwrite } = require('appwrite');
-const config = require('../config.json');
+require('dotenv').config();
+const { Client, Databases } = require('appwrite');
+const config = require('../config.json'); // Update the path as necessary
 
-let appwriteClient;
+const client = new Client()
+    .setEndpoint(config.appwrite.endpoint) // Ensure this is correctly set
+    .setProject(config.appwrite.projectId)
 
-function initializeAppwriteClient() {
+const databases = new Databases(client);
+
+const addUserToDatabase = async (user) => {
     try {
-        appwriteClient = new Appwrite();
-
-        // Read configuration from config.json
-        const { endpoint, projectId, apiKey } = config.appwrite;
-
-        // Set endpoint, project ID, and API key
-        appwriteClient
-            .setEndpoint(endpoint)
-            .setProject(projectId)
-            .setKey(apiKey);
-
-        console.log('Appwrite client initialized');
+        await databases.createDocument(
+            config.appwrite.discordDatabase.discordDatabaseId,
+            config.appwrite.discordDatabase.usersCollectionId, // Specify the collection ID here
+            'unique()', // Generate a unique ID for the document
+            {
+                email: user.email,
+                username: user.username,
+                discordId: user.discordId,
+                joinedAt: new Date().toISOString()
+            }
+        );
     } catch (error) {
-        console.error('Failed to initialize Appwrite client:', error);
-        throw error; // Throw error for better error handling in client.js
+        console.error('Error adding user to database:', error);
     }
-}
+};
 
-function getAppwriteClient() {
-    if (!appwriteClient) {
-        throw new Error('Appwrite client not initialized');
-    }
-    return appwriteClient;
-}
-
-module.exports = { initializeAppwriteClient, getAppwriteClient };
+module.exports = { addUserToDatabase };
