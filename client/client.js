@@ -1,10 +1,13 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder } = require('discord.js');
-const schedule = require('node-schedule');
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 const config = require('../config.json');
-const { addUserToDatabase } = require('../gateway/appwrite');
+const { addUserToDatabase, getUserByDiscordId, updateUserStatus, getAppwriteClient } = require('../gateway/appwrite');
 const { logEvent } = require('../shared/logger');
+const { startServerStatusAlerts } = require('../shared/serverStatusAlerts');
+const schedule = require('node-schedule');
 
-const client = new Client({ 
+const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
@@ -12,16 +15,89 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessageReactions,
         GatewayIntentBits.GuildMessageReactions
-    ], 
+    ],
     partials: [Partials.Channel, Partials.Message, Partials.Reaction] // Ensure partials are included for messages and reactions
 });
 
+client.commands = new Collection();
+
+// Load commands
+const commandsPath = path.join(__dirname, 'commands');
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+
+for (const file of commandFiles) {
+    const filePath = path.join(commandsPath, file);
+    const command = require(filePath);
+
+    console.log(`Loaded command from ${filePath}:`, command);
+
+    if (!command.data || !command.data.name) {
+        console.error(`Command in ${filePath} is missing 'data.name' property.`);
+        continue;
+    }
+
+    client.commands.set(command.data.name, command);
+}
+
+// Event: When the client is ready
 client.once('ready', () => {
     const message = `Client: ${client.user.tag} is online!`;
-    console.log(message); // For debugging, keep this line if needed
+    console.log(message);
     logEvent('Bot is online!', message);
+
+    // Start server status alerts
+    startServerStatusAlerts(client);
+
+    // Register slash commands with Discord API
+    const rest = new REST({ version: '10' }).setToken(config.discord.botToken);
+
+    const commands = client.commands.map(cmd => cmd.data.toJSON());
+
+    (async () => {
+        try {
+            await rest.put(
+                Routes.applicationCommands(client.user.id),
+                { body: commands },
+            );
+            console.log('Successfully registered application commands.');
+        } catch (error) {
+            console.error('Error registering application commands:', error);
+        }
+    })();
 });
 
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isCommand()) return;
+
+    const command = client.commands.get(interaction.commandName);
+
+    if (!command) {
+        console.error(`Command ${interaction.commandName} not found`);
+        return;
+    }
+
+    try {
+        // Log command usage
+        logEvent('Command Used', 'CommandExecution', {
+            userId: interaction.user.id,
+            username: interaction.user.tag,
+            command: interaction.commandName,
+            timestamp: new Date().toISOString()
+        });
+
+        await command.execute(interaction);
+        console.log(`Executed command: ${interaction.commandName}`);
+    } catch (error) {
+        console.error('Error executing command:', error);
+        if (interaction.replied || interaction.deferred) {
+            await interaction.followUp('There was an error executing this command!');
+        } else {
+            await interaction.reply('There was an error executing this command!');
+        }
+    }
+});
+
+// Event: When a new member joins the guild
 client.on('guildMemberAdd', async (member) => {
     logEvent('New member joined', 'MemberEvent', { user: member.user.tag });
 
@@ -104,23 +180,34 @@ client.on('guildMemberAdd', async (member) => {
 
             // Verification successful
             try {
-                await addUserToDatabase({
-                    discordUserId: member.id,
-                    username: member.user.tag,
-                    JoinedAt: new Date().toISOString(),
-                    verifiedStatus: true,
-                    verificationDate: new Date().toISOString(),
-                    lastActive: new Date().toISOString(),
-                    roles: member.roles.cache.map(role => role.id),
-                    warnings: 0,
-                    bans: 0,
-                    lastAction: null,
-                    notes: '',
-                    ticketIds: [],
-                    discordCreation: member.user.createdAt.toISOString(),
-                });
-
-                logEvent('User added to database', 'MemberEvent', { user: member.user.tag });
+                const existingUser = await getUserByDiscordId(member.id);
+                if (existingUser) {
+                    // Update existing user's status and last action
+                    await updateUserStatus(member.id, {
+                        verifiedStatus: true,
+                        lastActive: new Date().toISOString(),
+                        lastAction: 'Rejoined the server'
+                    });
+                    logEvent('User rejoined and status updated', 'MemberEvent', { user: member.user.tag });
+                } else {
+                    // Add new user to the database
+                    await addUserToDatabase({
+                        discordUserId: member.id,
+                        username: member.user.tag,
+                        JoinedAt: new Date().toISOString(),
+                        verifiedStatus: true,
+                        verificationDate: new Date().toISOString(),
+                        lastActive: new Date().toISOString(),
+                        roles: member.roles.cache.map(role => role.id),
+                        warnings: 0,
+                        bans: 0,
+                        lastAction: null,
+                        notes: '',
+                        ticketIds: [],
+                        discordCreation: member.user.createdAt.toISOString(),
+                    });
+                    logEvent('New user added to database', 'MemberEvent', { user: member.user.tag });
+                }
 
                 // Ensure the member role is added
                 if (!member.roles.cache.has(config.roles.memberRoleId)) {
@@ -135,12 +222,14 @@ client.on('guildMemberAdd', async (member) => {
                     }
 
                     const welcomeChannel = await client.channels.fetch(welcomeChannelId);
-                    const joinTimestamp = new Date().toLocaleString();
+
                     if (welcomeChannel) {
+                        const joinTimestamp = new Date().toLocaleString();
+
                         const welcomeEmbed = new EmbedBuilder()
                             .setColor('#D08770')
                             .setTitle('Welcome to Our Server!')
-                            .setDescription(`<@${member.id}>, you've have been granted access to the server!`)
+                            .setDescription(`<@${member.id}>, you've been granted access to the server!`)
                             .setFooter({ text: `User ID: ${member.id} | Timestamp: ${joinTimestamp}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
                         await welcomeChannel.send({ embeds: [welcomeEmbed] });
@@ -155,7 +244,7 @@ client.on('guildMemberAdd', async (member) => {
                 firstReminder.cancel();
                 finalReminder.cancel();
             } catch (error) {
-                logEvent('Error adding user to Appwrite', 'Error', error.message);
+                logEvent('Error adding or updating user in Appwrite', 'Error', error.message);
             }
         });
 
@@ -171,6 +260,7 @@ client.on('guildMemberAdd', async (member) => {
     }
 });
 
+// Event: When a member leaves the guild
 client.on('guildMemberRemove', async (member) => {
     const leaveTimestamp = new Date().toLocaleString();
     logEvent('Member left', 'MemberEvent', { user: member.user.tag, userId: member.id, timestamp: leaveTimestamp });

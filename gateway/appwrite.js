@@ -10,7 +10,7 @@ const config = require('../config.json');
 client
     .setEndpoint(config.appwrite.endpoint) // Appwrite endpoint
     .setProject(config.appwrite.projectId) // Appwrite project ID
-    .setKey(config.appwrite.apiKey); // ppwrite API key
+    .setKey(config.appwrite.apiKey); // Appwrite API key
 
 // Define the function to add a user to the database
 const addUserToDatabase = async (user) => {
@@ -43,4 +43,43 @@ const addUserToDatabase = async (user) => {
     }
 };
 
-module.exports = { addUserToDatabase, databases };
+// Define the function to get a user by discordUserId
+const getUserByDiscordId = async (discordUserId) => {
+    try {
+        const response = await databases.listDocuments(
+            config.appwrite.discordDatabase.discordDatabaseId, // discordDatabase ID
+            config.appwrite.discordDatabase.usersCollectionId, // Users Collection ID
+            [`equal("discordUserId", "${discordUserId}")`] // Filter by discordUserId
+        );
+        if (response.documents.length > 0) {
+            return response.documents[0];
+        } else {
+            return null;
+        }
+    } catch (error) {
+        console.error('Error fetching user from Appwrite:', error);
+        throw error;
+    }
+};
+
+// Define the function to update the user's status
+const updateUserStatus = async (discordUserId, updateData) => {
+    try {
+        const user = await getUserByDiscordId(discordUserId);
+        if (!user) {
+            throw new Error(`User with discordUserId ${discordUserId} not found`);
+        }
+        const response = await databases.updateDocument(
+            config.appwrite.discordDatabase.discordDatabaseId, // discordDatabase ID
+            config.appwrite.discordDatabase.usersCollectionId, // Users Collection ID
+            user.$id, // User document ID
+            updateData
+        );
+        return response;
+    } catch (error) {
+        console.error('Error updating user in Appwrite:', error);
+        throw error;
+    }
+};
+
+module.exports = { addUserToDatabase, getUserByDiscordId, updateUserStatus, databases };

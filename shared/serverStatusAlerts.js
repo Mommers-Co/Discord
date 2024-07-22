@@ -1,10 +1,10 @@
 const si = require('systeminformation');
 const { sendStatusUpdate } = require('./utils');
-const { logEvent } = require('../shared/logger');
-const { serverConfig } = require('../shared/constants');
+const { logEvent } = require('./logger');
+const { serverConfig } = require('./constants');
 
 // Function to start server status monitoring
-function startServerStatusMonitoring(client) {
+function startServerStatusAlerts(client) {
     setInterval(() => {
         const statusMessage = `Server status update: ${new Date().toLocaleTimeString()}`;
         sendStatusUpdate(client, statusMessage);
@@ -49,4 +49,4 @@ async function updateServerStatus(client) {
     }
 }
 
-module.exports = { startServerStatusMonitoring };
+module.exports = { startServerStatusAlerts };
