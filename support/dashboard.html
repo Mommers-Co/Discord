@@ -31,9 +31,9 @@
     <script>
         const client = new window.Appwrite();
         client
-            .setEndpoint('YOUR_APPWRITE_ENDPOINT')
-            .setProject('YOUR_APPWRITE_PROJECT_ID')
-            .setKey('YOUR_APPWRITE_API_KEY')
+            .setEndpoint('https://cloud.appwrite.io/v1')
+            .setProject('6690d5020033362e1d71')
+            .setKey('dfffc66ef976b79d5a8bf9461115c4fe2124453d1de575721265df15d19f8e5c87c1e2555aedfcfd58f6f6f1f6362d0b93df07f441f469cae4c7a9220f141e70170b4b2173d5752f38002416d4de615a6859e656c03bc0bd9f52c4f5aca02edfda694e597c1a097f4bdc3e24ecaf47f5ef8c4cabadc390a17ff185947bc65ea4')
             .setSelfSigned();
 
         const database = new window.Appwrite.Database(client);
