@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuil
 const fs = require('fs');
 const path = require('path');
 const config = require('../config.json');
-const { addUserToDatabase, getUserByDiscordId, updateUserStatus, getAppwriteClient } = require('../gateway/appwrite');
+const { addUserToDatabase, getUserByDiscordId, updateUserStatus } = require('../gateway/appwrite');
 const { logEvent } = require('../shared/logger');
 const { startServerStatusAlerts } = require('../shared/serverStatusAlerts');
 const schedule = require('node-schedule');
@@ -16,10 +16,19 @@ const client = new Client({
         GatewayIntentBits.DirectMessageReactions,
         GatewayIntentBits.GuildMessageReactions
     ],
-    partials: [Partials.Channel, Partials.Message, Partials.Reaction] // Ensure partials are included for messages and reactions
+    partials: [Partials.Channel, Partials.Message, Partials.Reaction]
 });
 
 client.commands = new Collection();
+
+// Helper function to log events with console fallback
+const LogEvent = async (eventType, eventCategory, eventData) => {
+    try {
+        await logEvent(eventType, eventCategory, eventData);
+    } catch (error) {
+        console.error(`Failed to log event: ${eventType} - Error: ${error.message}`);
+    }
+};
 
 // Load commands
 const commandsPath = path.join(__dirname, 'commands');
@@ -29,28 +38,26 @@ for (const file of commandFiles) {
     const filePath = path.join(commandsPath, file);
     const command = require(filePath);
 
-    console.log(`Loaded command from ${filePath}:`, command);
-
     if (!command.data || !command.data.name) {
-        console.error(`Command in ${filePath} is missing 'data.name' property.`);
+        LogEvent('Command Loading Error', 'Error', `Command in ${filePath} is missing 'data.name' property.`);
         continue;
     }
 
     client.commands.set(command.data.name, command);
+    LogEvent('Command Loaded', 'Info', { commandName: command.data.name, filePath });
 }
 
 // Event: When the client is ready
 client.once('ready', () => {
     const message = `Client: ${client.user.tag} is online!`;
-    console.log(message);
-    logEvent('Bot is online!', message);
+    LogEvent('Bot Online', 'Info', message);
 
     // Start server status alerts
     startServerStatusAlerts(client);
+    LogEvent('Server Status Alerts Started', 'Info');
 
     // Register slash commands with Discord API
     const rest = new REST({ version: '10' }).setToken(config.discord.botToken);
-
     const commands = client.commands.map(cmd => cmd.data.toJSON());
 
     (async () => {
@@ -59,26 +66,25 @@ client.once('ready', () => {
                 Routes.applicationCommands(client.user.id),
                 { body: commands },
             );
-            console.log('Successfully registered application commands.');
+            LogEvent('Application Commands Registered', 'Info');
         } catch (error) {
-            console.error('Error registering application commands:', error);
+            LogEvent('Application Commands Registration Error', 'Error', error.message);
         }
     })();
 });
 
+// Event: Command interaction
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
 
     const command = client.commands.get(interaction.commandName);
-
     if (!command) {
-        console.error(`Command ${interaction.commandName} not found`);
+        LogEvent('Command Not Found', 'Error', { commandName: interaction.commandName });
         return;
     }
 
     try {
-        // Log command usage
-        logEvent('Command Used', 'CommandExecution', {
+        LogEvent('Command Executed', 'Info', {
             userId: interaction.user.id,
             username: interaction.user.tag,
             command: interaction.commandName,
@@ -86,9 +92,9 @@ client.on('interactionCreate', async (interaction) => {
         });
 
         await command.execute(interaction);
-        console.log(`Executed command: ${interaction.commandName}`);
     } catch (error) {
-        console.error('Error executing command:', error);
+        LogEvent('Command Execution Error', 'Error', { commandName: interaction.commandName, error: error.message });
+
         if (interaction.replied || interaction.deferred) {
             await interaction.followUp('There was an error executing this command!');
         } else {
@@ -99,15 +105,15 @@ client.on('interactionCreate', async (interaction) => {
 
 // Event: When a new member joins the guild
 client.on('guildMemberAdd', async (member) => {
-    logEvent('New member joined', 'MemberEvent', { user: member.user.tag });
+    LogEvent('New Member Joined', 'MemberEvent', { user: member.user.tag, userId: member.id });
 
     let verificationMessage;
-    const sixHours = 6 * 60 * 60 * 1000; // 6 hours
-    const finalReminderInterval = 1 * 60 * 60 * 1000; // 1 hour
+    const sixHours = 6 * 60 * 60 * 1000;
+    const finalReminderInterval = 1 * 60 * 60 * 1000;
 
     try {
         const dmChannel = await member.createDM();
-        logEvent('DM Channel Created', 'MemberEvent', { user: member.user.tag });
+        LogEvent('DM Channel Created', 'MemberEvent', { user: member.user.tag, userId: member.id });
 
         // DM message to the new member
         const dmEmbed = new EmbedBuilder()
@@ -117,14 +123,12 @@ client.on('guildMemberAdd', async (member) => {
             .setFooter({ text: 'Thank you for joining us!', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
         verificationMessage = await dmChannel.send({ embeds: [dmEmbed] });
-        await verificationMessage.react('✅'); // React with the verification emoji
-        logEvent('Verification DM Sent', 'MemberEvent', { user: member.user.tag });
+        await verificationMessage.react('✅');
+        LogEvent('Verification DM Sent', 'MemberEvent', { user: member.user.tag, userId: member.id });
 
-        const filter = (reaction, user) => {
-            return reaction.emoji.name === '✅' && user.id === member.id;
-        };
+        const filter = (reaction, user) => reaction.emoji.name === '✅' && user.id === member.id;
 
-        const collector = verificationMessage.createReactionCollector({ filter, time: 7 * 24 * 60 * 60 * 1000 }); // 7 days
+        const collector = verificationMessage.createReactionCollector({ filter, time: 7 * 24 * 60 * 60 * 1000 });
 
         // Schedule first reminder after 6 hours
         const firstReminder = schedule.scheduleJob(Date.now() + sixHours, async () => {
@@ -132,11 +136,11 @@ client.on('guildMemberAdd', async (member) => {
                 const reminderEmbed = new EmbedBuilder()
                     .setColor('#D08770')
                     .setTitle('Reminder: Verify Your Account')
-                    .setDescription(`Please verify your account by reacting with ✅ to the verification message. You have 6 hours left to complete the verification process.`)
+                    .setDescription('Please verify your account by reacting with ✅ to the verification message. You have 6 hours left to complete the verification process.')
                     .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
                 await dmChannel.send({ embeds: [reminderEmbed] });
-                logEvent('1st Verification Reminder Sent', 'MemberEvent', { user: member.user.tag });
+                LogEvent('1st Verification Reminder Sent', 'MemberEvent', { user: member.user.tag, userId: member.id });
             }
         });
 
@@ -150,7 +154,7 @@ client.on('guildMemberAdd', async (member) => {
                     .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
                 await dmChannel.send({ embeds: [finalReminderEmbed] });
-                logEvent('2nd Verification Reminder Sent', 'MemberEvent', { user: member.user.tag });
+                LogEvent('2nd Verification Reminder Sent', 'MemberEvent', { user: member.user.tag, userId: member.id });
             }
         });
 
@@ -158,7 +162,7 @@ client.on('guildMemberAdd', async (member) => {
         schedule.scheduleJob(Date.now() + 3 * sixHours, async () => {
             if (!member.roles.cache.has(config.roles.memberRoleId)) {
                 await member.kick('Verification not completed within the given time');
-                logEvent('Member kicked due to non-verification', 'MemberEvent', { user: member.user.tag });
+                LogEvent('Member Kicked for Non-Verification', 'MemberEvent', { user: member.user.tag, userId: member.id });
 
                 const kickEmbed = new EmbedBuilder()
                     .setColor('#D08770')
@@ -166,31 +170,29 @@ client.on('guildMemberAdd', async (member) => {
                     .setDescription(`${member.user.tag} was removed from the server due to failure to verify their account.`)
                     .setFooter({ text: `User ID: ${member.id}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
-                const leaveChannel = await client.channels.fetch(config.channels.mainEntranceChannelId);
+                const leaveChannel = await client.channels.fetch(config.discord.channels.mainEntranceChannelId);
                 if (leaveChannel) {
                     await leaveChannel.send({ embeds: [kickEmbed] });
+                    LogEvent('Member Removal Announced', 'MemberEvent', { user: member.user.tag, userId: member.id });
                 }
             }
         });
 
         collector.on('collect', async (reaction, user) => {
             if (user.id !== member.id) return;
-            
-            logEvent('Verification DM Verified', 'MemberEvent', { user: member.user.tag });
 
-            // Verification successful
+            LogEvent('Verification Reaction Collected', 'MemberEvent', { user: member.user.tag, userId: member.id });
+
             try {
                 const existingUser = await getUserByDiscordId(member.id);
                 if (existingUser) {
-                    // Update existing user's status and last action
                     await updateUserStatus(member.id, {
                         verifiedStatus: true,
                         lastActive: new Date().toISOString(),
                         lastAction: 'Rejoined the server'
                     });
-                    logEvent('User rejoined and status updated', 'MemberEvent', { user: member.user.tag });
+                    LogEvent('User Rejoined - Status Updated', 'MemberEvent', { user: member.user.tag, userId: member.id });
                 } else {
-                    // Add new user to the database
                     await addUserToDatabase({
                         discordUserId: member.id,
                         username: member.user.tag,
@@ -206,73 +208,53 @@ client.on('guildMemberAdd', async (member) => {
                         ticketIds: [],
                         discordCreation: member.user.createdAt.toISOString(),
                     });
-                    logEvent('New user added to database', 'MemberEvent', { user: member.user.tag });
+                    LogEvent('New User Added to Database', 'MemberEvent', { user: member.user.tag, userId: member.id });
                 }
 
-                // Ensure the member role is added
                 if (!member.roles.cache.has(config.roles.memberRoleId)) {
                     await member.roles.add(config.roles.memberRoleId);
-                    logEvent('Member verified and role added', 'MemberEvent', { user: member.user.tag });
+                    LogEvent('Role Added to Verified Member', 'MemberEvent', { user: member.user.tag, userId: member.id });
 
-                    // Send a thank you message in the welcome channel
-                    const welcomeChannelId = config.channels.mainEntranceChannelId;
-
-                    if (!welcomeChannelId) {
-                        throw new Error('Welcome channel ID is not defined in config.json.');
-                    }
-
-                    const welcomeChannel = await client.channels.fetch(welcomeChannelId);
-
+                    const welcomeChannel = await client.channels.fetch(config.discord.channels.mainEntranceChannelId);
                     if (welcomeChannel) {
-                        const joinTimestamp = new Date().toLocaleString();
-
                         const welcomeEmbed = new EmbedBuilder()
                             .setColor('#D08770')
                             .setTitle('Welcome to Our Server!')
                             .setDescription(`<@${member.id}>, you've been granted access to the server!`)
-                            .setFooter({ text: `User ID: ${member.id} | Timestamp: ${joinTimestamp}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
+                            .setFooter({ text: `User ID: ${member.id}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
                         await welcomeChannel.send({ embeds: [welcomeEmbed] });
-                    } else {
-                        console.error(`[${new Date().toLocaleString()}] Welcome channel ${welcomeChannelId} not found.`);
-                        logEvent('DiscordError', 'Welcome channel not found', welcomeChannelId);
+                        LogEvent('Welcome Message Sent', 'MemberEvent', { user: member.user.tag, userId: member.id });
                     }
                 }
 
-                // Stop the collector and cancel all scheduled jobs
                 collector.stop('verified');
                 firstReminder.cancel();
                 finalReminder.cancel();
             } catch (error) {
-                logEvent('Error adding or updating user in Appwrite', 'Error', error.message);
+                LogEvent('Error During Verification Process', 'Error', error.message);
             }
         });
 
         collector.on('end', async (collected, reason) => {
             if (reason !== 'verified') {
                 await member.kick('Verification not completed');
-                logEvent('Member kicked due to non-verification', 'MemberEvent', { user: member.user.tag });
+                LogEvent('Member Kicked for Non-Verification', 'MemberEvent', { user: member.user.tag, userId: member.id });
             }
         });
 
     } catch (error) {
-        logEvent('Error handling new member', 'Error', error.message);
+        LogEvent('Error Handling New Member', 'Error', error.message);
     }
 });
 
 // Event: When a member leaves the guild
 client.on('guildMemberRemove', async (member) => {
     const leaveTimestamp = new Date().toLocaleString();
-    logEvent('Member left', 'MemberEvent', { user: member.user.tag, userId: member.id, timestamp: leaveTimestamp });
-    
+    LogEvent('Member Left', 'MemberEvent', { user: member.user.tag, userId: member.id, timestamp: leaveTimestamp });
+
     try {
-        const leaveChannelId = config.channels.mainEntranceChannelId;
-
-        if (!leaveChannelId) {
-            throw new Error('Leave channel ID is not defined in config.json.');
-        }
-
-        const leaveChannel = await client.channels.fetch(leaveChannelId);
+        const leaveChannel = await client.channels.fetch(config.discord.channels.mainEntranceChannelId);
 
         if (leaveChannel) {
             const leaveEmbed = new EmbedBuilder()
@@ -282,20 +264,18 @@ client.on('guildMemberRemove', async (member) => {
                 .setThumbnail(member.user.displayAvatarURL())
                 .setFooter({ text: `User ID: ${member.id} | Timestamp: ${leaveTimestamp}`, iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
-            if (!member.roles.cache.has(config.roles.memberRoleId)) {
-                leaveEmbed.setDescription(`${member.user.tag} left the server due to non-verification.`);
-            }
-
             await leaveChannel.send({ embeds: [leaveEmbed] });
-        } else {
-            console.error(`[${new Date().toLocaleString()}] Leave channel ${leaveChannelId} not found.`);
-            logEvent('DiscordError', 'Leave channel not found', leaveChannelId);
+            LogEvent('Member Leave Announced', 'MemberEvent', { user: member.user.tag, userId: member.id });
         }
     } catch (error) {
-        logEvent('Error handling member leave', 'Error', error.message);
+        LogEvent('Error Handling Member Leave', 'Error', error.message);
     }
 });
 
+// Bot login via token
 client.login(config.discord.botToken).catch(error => {
-    logEvent('Failed to login', 'Error', error.message);
+    LogEvent('Bot Login Failed', 'Error', error.message);
 });
+
+// Export the client for use in other modules
+module.exports = client;
