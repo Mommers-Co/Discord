@@ -73,6 +73,14 @@ client.once('ready', () => {
     })();
 });
 
+const { runBackup } = require('../gateway/backup');
+
+// Schedule the backup according to the interval set in config
+setInterval(() => {
+    runBackup(client);
+}, config.backupInterval);
+
+
 // Event: Command interaction
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
