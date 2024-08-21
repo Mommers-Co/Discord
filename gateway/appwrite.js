@@ -1,10 +1,11 @@
 require('dotenv').config();
 const sdk = require('node-appwrite');
+const moment = require('moment'); // For date manipulation
 
 const client = new sdk.Client();
 const databases = new sdk.Databases(client);
 
-const config = require('../config.json'); 
+const config = require('../config.json');
 
 // Initialize the Appwrite client
 client
@@ -82,4 +83,54 @@ const updateUserStatus = async (discordUserId, updateData) => {
     }
 };
 
-module.exports = { addUserToDatabase, getUserByDiscordId, updateUserStatus, databases };
+// Function to add all current Discord users who joined before today
+const addAllCurrentUsers = async (guild) => {
+    try {
+        const today = moment().startOf('day');
+        const members = await guild.members.fetch();
+        
+        for (const [_, member] of members) {
+            const joinedAt = moment(member.joinedAt);
+            if (joinedAt.isBefore(today)) {
+                const user = {
+                    discordUserId: member.id,
+                    username: member.user.tag,
+                    JoinedAt: joinedAt.toISOString(),
+                    verifiedStatus: false, // Default value
+                    verificationDate: null,
+                    lastActive: new Date().toISOString(),
+                    roles: member.roles.cache.map(role => role.id),
+                    warnings: 0,
+                    bans: 0,
+                    lastAction: null,
+                    notes: '',
+                    ticketIds: [],
+                    discordCreation: member.user.createdAt.toISOString(),
+                };
+
+                try {
+                    await addUserToDatabase(user);
+                    console.log(`User ${member.user.tag} added to the database.`);
+                } catch (error) {
+                    console.error(`Error adding user ${member.user.tag} to database: ${error.message}`);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error adding all current users to Appwrite:', error);
+    }
+};
+
+// Function to constantly update the database (e.g., every hour)
+const startDatabaseUpdater = (guild) => {
+    setInterval(async () => {
+        try {
+            await addAllCurrentUsers(guild);
+            console.log('Database updated with current users.');
+        } catch (error) {
+            console.error('Error updating database:', error);
+        }
+    }, 300000); // Update every hour (3600000 ms)
+};
+
+module.exports = { addUserToDatabase, getUserByDiscordId, updateUserStatus, startDatabaseUpdater };
