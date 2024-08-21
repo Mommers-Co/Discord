@@ -250,6 +250,7 @@ client.on('guildMemberRemove', async (member) => {
         .setFooter({ text: `User ID: ${member.id}`, iconURL: config.serverLogo });
 
     const farewellChannel = member.guild.channels.cache.get(config.discord.channels.mainEntranceChannelId);
+    LogEvent('User left the Server', 'MemberEvent', { user: member.user.tag, userId: member.id });
     
     // Check if the channel exists before sending the message
     if (farewellChannel) {
