@@ -1,7 +1,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const archiver = require('archiver');
-const { EventLog, ConsoleLog } = require('./logger');
+const { EventLog, ConsoleLog } = require('../shared/logger');
 
 // Backup directory
 const backupDir = path.join(__dirname, '../backups');

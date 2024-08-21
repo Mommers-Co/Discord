@@ -4,16 +4,20 @@ const { logEvent } = require('./logger');
 const { serverConfig } = require('./constants');
 const config = require('../config.json');
 
-const alertCooldowns = new Map();
+const alertPersistTime = 5 * 60 * 1000; // 5 minutes
 const ALERT_COOLDOWN_INTERVAL = 60 * 1000; // 1 minute
 
-// Function to start server status monitoring
+// Track previous high usage occurrences
+const highUsageStartTimes = {
+    cpu: null,
+    memory: null,
+    disk: null
+};
+
+// Function to start server status alerts
 function startServerStatusAlerts(client) {
-    setInterval(() => {
-        const statusMessage = `Server status update: ${new Date().toLocaleTimeString()}`;
-        sendStatusUpdate(client, statusMessage);
-        updateServerStatus(client);
-    }, serverConfig.monitorInterval * 1000); // Update status every `monitorInterval` seconds
+    // Call updateServerStatus to check status immediately
+    updateServerStatus(client);
 }
 
 // Function to send a system alert
@@ -46,38 +50,6 @@ async function sendSystemAlert(client, channelId, alertMessage) {
     }
 }
 
-// Function to send the status update to the Discord channel
-async function sendStatusUpdate(client, statusMessage = 'Status update') {
-    const channelId = config.discord.channels.systemAlertsId;
-
-    if (client) {
-        const channel = client.channels.cache.get(channelId);
-
-        if (channel) {
-            const embed = new EmbedBuilder()
-                .setColor('#0099ff')
-                .setTitle('System Status Update')
-                .setDescription(`${statusMessage}\n\n<@&972359999714111528>`) // Mentioning the system administrator role
-                .setTimestamp();
-
-            try {
-                // Send a new message each time without editing any existing messages
-                await channel.send({ embeds: [embed] });
-                logEvent('StatusUpdateSent', 'System Status Update', statusMessage);
-            } catch (error) {
-                console.error(`[${new Date().toLocaleString()}] Failed to send status update: ${error}`);
-                logEvent('StatusUpdateError', 'Error', error.message);
-            }
-        } else {
-            console.error(`[${new Date().toLocaleString()}] Channel ${channelId} not found.`);
-            logEvent('ChannelNotFound', 'Error', `Channel ${channelId} not found.`);
-        }
-    } else {
-        console.error(`[${new Date().toLocaleString()}] Status client not initialized.`);
-        logEvent('ClientNotInitialized', 'Error', 'Status client is not initialized');
-    }
-}
-
 // Function to update server status metrics
 async function updateServerStatus(client) {
     try {
@@ -89,17 +61,43 @@ async function updateServerStatus(client) {
         const alertThresholds = serverConfig.alertThresholds;
         let alertMessage = '';
 
+        // Check CPU usage
         if (cpu.currentLoad > alertThresholds.cpu) {
-            alertMessage += `⚠️ High CPU usage: ${cpu.currentLoad.toFixed(2)}%\n`;
-            alertMessage += `In use: ${cpu.currentLoad.toFixed(2)}% - Available: ${(100 - cpu.currentLoad).toFixed(2)}%\n`;
+            if (!highUsageStartTimes.cpu) {
+                highUsageStartTimes.cpu = Date.now();
+            } else if (Date.now() - highUsageStartTimes.cpu >= alertPersistTime) {
+                alertMessage += `⚠️ High CPU usage: ${cpu.currentLoad.toFixed(2)}%\n`;
+                alertMessage += `In use: ${cpu.currentLoad.toFixed(2)}% - Available: ${(100 - cpu.currentLoad).toFixed(2)}%\n`;
+                highUsageStartTimes.cpu = Date.now(); // Reset start time after alert
+            }
+        } else {
+            highUsageStartTimes.cpu = null;
         }
+
+        // Check memory usage
         if ((mem.used / mem.total) * 100 > alertThresholds.memory) {
-            alertMessage += `⚠️ High memory usage: ${(mem.used / mem.total * 100).toFixed(2)}%\n`;
-            alertMessage += `In use: ${(mem.used / mem.total * 100).toFixed(2)}% - Available: ${((1 - (mem.used / mem.total)) * 100).toFixed(2)}%\n`;
+            if (!highUsageStartTimes.memory) {
+                highUsageStartTimes.memory = Date.now();
+            } else if (Date.now() - highUsageStartTimes.memory >= alertPersistTime) {
+                alertMessage += `⚠️ High memory usage: ${(mem.used / mem.total * 100).toFixed(2)}%\n`;
+                alertMessage += `In use: ${(mem.used / mem.total * 100).toFixed(2)}% - Available: ${((1 - (mem.used / mem.total)) * 100).toFixed(2)}%\n`;
+                highUsageStartTimes.memory = Date.now(); // Reset start time after alert
+            }
+        } else {
+            highUsageStartTimes.memory = null;
         }
+
+        // Check disk usage
         if (disk.length > 0 && disk[0].use > alertThresholds.disk) {
-            alertMessage += `⚠️ High disk usage: ${disk[0].use}%\n`;
-            alertMessage += `In use: ${disk[0].use}% - Available: ${(100 - disk[0].use).toFixed(2)}%\n`;
+            if (!highUsageStartTimes.disk) {
+                highUsageStartTimes.disk = Date.now();
+            } else if (Date.now() - highUsageStartTimes.disk >= alertPersistTime) {
+                alertMessage += `⚠️ High disk usage: ${disk[0].use}%\n`;
+                alertMessage += `In use: ${disk[0].use}% - Available: ${(100 - disk[0].use).toFixed(2)}%\n`;
+                highUsageStartTimes.disk = Date.now(); // Reset start time after alert
+            }
+        } else {
+            highUsageStartTimes.disk = null;
         }
 
         // Send system alert if necessary and not recently sent
