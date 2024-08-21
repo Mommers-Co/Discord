@@ -40,7 +40,7 @@ for (const file of commandFiles) {
     const command = require(filePath);
 
     if (!command.data || !command.data.name) {
-        LogEvent('Command Loading Error', 'Error', `Command in ${filePath} is missing 'data.name' property.`);
+        LogEvent('Command Loading Error', 'Error', { filePath, message: "Command is missing 'data.name' property." });
         continue;
     }
 
@@ -51,7 +51,7 @@ for (const file of commandFiles) {
 // Event: When the client is ready
 client.once('ready', async () => {
     const message = `Client: ${client.user.tag} is online!`;
-    LogEvent('Bot Online', 'Info', message);
+    LogEvent('Bot Online', 'Info', { message });
 
     // Start server status alerts
     startServerStatusAlerts(client);
@@ -68,13 +68,13 @@ client.once('ready', async () => {
         );
         LogEvent('Application Commands Registered', 'Info');
     } catch (error) {
-        LogEvent('Application Commands Registration Error', 'Error', error.message);
+        LogEvent('Application Commands Registration Error', 'Error', { message: error.message });
     }
 });
 
 setInterval(() => {
     runBackup(client);
-    LogEvent('Backup started', 'Info')
+    LogEvent('Backup started', 'Info');
 }, config.discord.backupInterval);
 
 // Event: Command interaction
@@ -114,6 +114,28 @@ client.on('guildMemberAdd', async (member) => {
     const sixHours = 6 * 60 * 60 * 1000;
 
     try {
+        // Check if user exists in the database
+        const existingUser = await getUserByDiscordId(member.id);
+        if (existingUser) {
+            await updateUserStatus(member.id, { lastActive: new Date().toISOString(), verifiedStatus: true });
+            LogEvent('Existing User Updated', 'MemberEvent', { user: member.user.tag, userId: member.id });
+        } else {
+            await addUserToDatabase({
+                discordUserId: member.id,
+                username: member.user.tag,
+                joinedAt: new Date().toISOString(),
+                verifiedStatus: false,
+                lastActive: new Date().toISOString(),
+                roles: [],
+                warnings: 0,
+                bans: 0,
+                notes: [],
+                ticketIds: [],
+                discordCreation: member.user.createdAt.toISOString(),
+            });
+            LogEvent('New User Added to Database', 'MemberEvent', { user: member.user.tag, userId: member.id });
+        }
+
         const dmChannel = await member.createDM();
         LogEvent('DM Channel Created', 'MemberEvent', { user: member.user.tag, userId: member.id });
 
@@ -189,24 +211,64 @@ client.on('guildMemberAdd', async (member) => {
                 .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
 
             await dmChannel.send({ embeds: [verifiedEmbed] });
-            collector.stop(); // Stop the collector after successful verification
-        });
 
-        collector.on('end', async collected => {
-            if (collected.size === 0) {
-                await member.kick('Failed to verify account');
-                LogEvent('Member Kicked After Verification Timeout', 'MemberEvent', { user: member.user.tag, userId: member.id });
+            // Send welcome message to the main entrance channel
+            const welcomeChannel = member.guild.channels.cache.get(config.discord.channels.mainEntranceChannelId);
+            if (welcomeChannel) {
+                const welcomeEmbed = new EmbedBuilder()
+                    .setColor('#A3BE8C')
+                    .setTitle('Welcome to our Server!')
+                    .setDescription(`We are glad to have you here <@${member.user.id}>!`)
+                    .setFooter({ text: 'Mommers Co', iconURL: 'https://i.imgur.com/QmJkPOZ.png' });
+
+                await welcomeChannel.send({ embeds: [welcomeEmbed] });
+                LogEvent('Welcome Message Sent', 'MemberEvent', { user: member.user.tag, userId: member.id });
+            } else {
+                LogEvent('Welcome Message Failed', 'Error', { user: member.user.tag, userId: member.id, error: 'Channel not found' });
             }
         });
+
+        // Collector ends
+        collector.on('end', async () => {
+            LogEvent('Verification Reaction Collector Ended', 'MemberEvent', { user: member.user.tag, userId: member.id });
+        });
+
     } catch (error) {
-        LogEvent('Verification DM Error', 'Error', { error: error.message, user: member.user.tag, userId: member.id });
+        LogEvent('GuildMemberAdd Event Error', 'Error', { error: error.message, user: member.user.tag, userId: member.id });
     }
 });
 
-// Handle any unhandled rejections to prevent the bot from crashing
-process.on('unhandledRejection', error => {
-    console.error('Unhandled Rejection:', error);
-    LogEvent('Unhandled Rejection', 'Error', error.message);
+// Event: When a member leaves the guild
+client.on('guildMemberRemove', async (member) => {
+    LogEvent('Member Left', 'MemberEvent', { user: member.user.tag, userId: member.id });
+
+    // Farewell embed message
+    const farewellEmbed = new EmbedBuilder()
+        .setColor('#BF616A')
+        .setTitle('Goodbye!')
+        .setDescription(`${member.user.tag} has left the server. We wish them all the best!`)
+        .setFooter({ text: `User ID: ${member.id}`, iconURL: config.serverLogo });
+
+    const farewellChannel = member.guild.channels.cache.get(config.discord.channels.mainEntranceChannelId);
+    
+    // Check if the channel exists before sending the message
+    if (farewellChannel) {
+        await farewellChannel.send({ embeds: [farewellEmbed] });
+        LogEvent('Farewell Message Sent', 'MemberEvent', { user: member.user.tag, userId: member.id });
+    } else {
+        LogEvent('Farewell Message Failed', 'Error', { user: member.user.tag, userId: member.id, error: 'Channel not found' });
+    }
+
+    // Update user status in Appwrite
+    try {
+        await updateUserStatus(member.id, { lastActive: new Date().toISOString(), verifiedStatus: false });
+        LogEvent('User Status Updated in Database', 'MemberEvent', { user: member.user.tag, userId: member.id });
+    } catch (error) {
+        LogEvent('Database Update Error', 'Error', { userId: member.id, username: member.user.tag, error: error.message });
+    }
 });
 
-client.login(config.discord.botToken);
+// Log in the Discord client
+client.login(config.discord.botToken)
+    .then(() => LogEvent('Bot Login Successful', 'Info'))
+    .catch(error => LogEvent('Bot Login Error', 'Error', { message: error.message }));

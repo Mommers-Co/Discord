@@ -49,7 +49,7 @@ const getUserByDiscordId = async (discordUserId) => {
         const response = await databases.listDocuments(
             config.appwrite.discordDatabase.discordDatabaseId, // discordDatabase ID
             config.appwrite.discordDatabase.usersCollectionId, // Users Collection ID
-            [`equal("discordUserId", "${discordUserId}")`] // Filter by discordUserId
+            [sdk.Query.equal("discordUserId", discordUserId)] // Filter by discordUserId
         );
         if (response.documents.length > 0) {
             return response.documents[0];
