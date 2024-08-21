@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder, ActivityType } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config.json');
@@ -70,7 +70,20 @@ client.once('ready', async () => {
     } catch (error) {
         LogEvent('Application Commands Registration Error', 'Error', { message: error.message });
     }
+
+    // Update the bot activity to reflect member count
+    const guild = client.guilds.cache.get(config.discord.guildId);
+    if (guild) {
+        const memberCount = guild.memberCount;
+        try {
+            await client.user.setActivity(`Members: ${memberCount}`, { type: ActivityType.Watching });
+            LogEvent('Bot Activity Updated', 'Info', { activity: `Watching ${memberCount} Members` });
+        } catch (error) {
+            LogEvent('Bot Activity Update Error', 'Error', { message: error.message });
+        }
+    }
 });
+
 
 setInterval(() => {
     runBackup(client);
