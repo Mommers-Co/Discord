@@ -123,13 +123,13 @@ client.on('guildMemberAdd', async (member) => {
             await addUserToDatabase({
                 discordUserId: member.id,
                 username: member.user.tag,
-                joinedAt: new Date().toISOString(),
+                JoinedAt: new Date().toISOString(),
                 verifiedStatus: false,
                 lastActive: new Date().toISOString(),
                 roles: [],
                 warnings: 0,
                 bans: 0,
-                notes: [],
+                notes: '',
                 ticketIds: [],
                 discordCreation: member.user.createdAt.toISOString(),
             });
