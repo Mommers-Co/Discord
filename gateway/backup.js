@@ -1,10 +1,10 @@
 const fs = require('fs-extra');
 const path = require('path');
 const archiver = require('archiver');
-const { Client } = require('discord.js');
+const { EventLog, ConsoleLog } = require('./logger');
 
 // Backup directory
-const backupDir = path.join(__dirname, 'backups');
+const backupDir = path.join(__dirname, '../backups');
 
 // Function to run the backup
 async function runBackup(client) {
@@ -22,27 +22,26 @@ async function runBackup(client) {
         });
 
         output.on('close', () => {
-            console.log(`Backup complete: ${backupPath} (${archive.pointer()} total bytes)`);
+            const successMessage = `Backup complete: ${backupPath} (${archive.pointer()} total bytes)`;
+            EventLog(successMessage);
+            console.log(successMessage);
         });
 
         archive.on('error', (err) => {
+            const errorMessage = `Backup failed: ${err.message}`;
+            EventLog(errorMessage);
+            console.log(errorMessage);
             throw err;
         });
 
         archive.pipe(output);
 
-        // Add files to the archive (e.g., backup files)
-        // Example: Add a file or directory to the archive
-        // archive.file('/path/to/file', { name: 'filename' });
-        // archive.directory('/path/to/directory', 'directory-name');
-
-        // In this example, assume there's a `data.json` file for backup
-        // Replace this with the actual files/directories you want to back up
         archive.directory(path.join(__dirname, 'data'), false);
 
         await archive.finalize();
     } catch (error) {
-        console.error('Error during backup:', error);
+        EventLog(`Error during backup: ${error.message}`);
+        console.log(`Error during backup: ${error.message}`);
     }
 }
 
