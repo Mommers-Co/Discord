@@ -76,7 +76,7 @@ client.once('ready', async () => {
     if (guild) {
         const memberCount = guild.memberCount;
         try {
-            await client.user.setActivity(`Members: ${memberCount}`, { type: ActivityType.Watching });
+            await client.user.setActivity(`${memberCount} Members`, { type: ActivityType.Watching });
             LogEvent('Bot Activity Updated', 'Info', { activity: `Watching ${memberCount} Members` });
         } catch (error) {
             LogEvent('Bot Activity Update Error', 'Error', { message: error.message });
