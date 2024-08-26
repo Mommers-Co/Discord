@@ -18,24 +18,10 @@ const addUserToDatabase = async (user) => {
     try {
         // Create a document in the usersCollectionId
         const response = await databases.createDocument(
-            config.appwrite.discordDatabase.discordDatabaseId, // discordDatabase ID
+            config.appwrite.discordDatabase.discordDatabaseId, // Discord Database ID
             config.appwrite.discordDatabase.usersCollectionId, // Users Collection ID
             'unique()', // Generate a unique ID
-            {
-                discordUserId: user.discordUserId,
-                username: user.username,
-                JoinedAt: user.JoinedAt,
-                verifiedStatus: user.verifiedStatus,
-                verificationDate: user.verificationDate,
-                lastActive: user.lastActive,
-                roles: user.roles,
-                warnings: user.warnings,
-                bans: user.bans,
-                lastAction: user.lastAction,
-                notes: user.notes,
-                ticketIds: user.ticketIds,
-                discordCreation: user.discordCreation,
-            }
+            user
         );
         return response;
     } catch (error) {
@@ -48,9 +34,9 @@ const addUserToDatabase = async (user) => {
 const getUserByDiscordId = async (discordUserId) => {
     try {
         const response = await databases.listDocuments(
-            config.appwrite.discordDatabase.discordDatabaseId, // discordDatabase ID
+            config.appwrite.discordDatabase.discordDatabaseId, // Discord Database ID
             config.appwrite.discordDatabase.usersCollectionId, // Users Collection ID
-            [sdk.Query.equal("discordUserId", discordUserId)] // Filter by discordUserId
+            [sdk.Query.equal('discordUserId', discordUserId)] // Filter by discordUserId
         );
         if (response.documents.length > 0) {
             return response.documents[0];
@@ -71,7 +57,7 @@ const updateUserStatus = async (discordUserId, updateData) => {
             throw new Error(`User with discordUserId ${discordUserId} not found`);
         }
         const response = await databases.updateDocument(
-            config.appwrite.discordDatabase.discordDatabaseId, // discordDatabase ID
+            config.appwrite.discordDatabase.discordDatabaseId, // Discord Database ID
             config.appwrite.discordDatabase.usersCollectionId, // Users Collection ID
             user.$id, // User document ID
             updateData
@@ -130,7 +116,27 @@ const startDatabaseUpdater = (guild) => {
         } catch (error) {
             console.error('Error updating database:', error);
         }
-    }, 300000); // Update every hour (3600000 ms)
+    }, config.appwrite.databaseUpdateInterval || 3600000); // Default to 1 hour if not set
 };
 
-module.exports = { addUserToDatabase, getUserByDiscordId, updateUserStatus, startDatabaseUpdater };
+// Function to add a log entry to the audit collection
+const addLogToAuditCollection = async (log) => {
+    try {
+        const response = await databases.createDocument(
+            config.appwrite.discordDatabase.discordDatabaseId,
+            config.appwrite.discordDatabase.auditLogsCollectionId,
+            'unique()',
+            {
+                eventType: log.eventType || 'UnknownEvent',
+                timestamp: log.timestamp || new Date().toISOString(),
+                details: log.details || 'No details provided'
+            }
+        );
+        return response;
+    } catch (error) {
+        console.error('Error adding log to Appwrite:', error);
+        throw error;
+    }
+};
+
+module.exports = { addUserToDatabase, getUserByDiscordId, updateUserStatus, startDatabaseUpdater, addLogToAuditCollection };
