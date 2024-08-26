@@ -5,6 +5,11 @@ module.exports = {
         .setName('ping')
         .setDescription('Replies with Pong!'),
     async execute(interaction) {
-        await interaction.reply('Pong!');
+        try {
+            await interaction.reply('Pong!');
+        } catch (error) {
+            console.error(`Failed to reply to ping interaction: ${error.message}`);
+            await interaction.followUp({ content: 'Something went wrong!', ephemeral: true });
+        }
     },
 };
