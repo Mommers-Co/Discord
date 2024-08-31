@@ -7,15 +7,19 @@ const { logEvent } = require('../shared/logger');
 const { startServerStatusAlerts } = require('../shared/serverStatusAlerts');
 const schedule = require('node-schedule');
 const { runBackup } = require('../gateway/backup');
+const { setupAuditLogs } = require('./audit.js');
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildBans,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessageReactions,
-        GatewayIntentBits.GuildMessageReactions
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.GuildMessageTyping,
+        GatewayIntentBits.GuildPresences
     ],
     partials: [Partials.Channel, Partials.Message, Partials.Reaction]
 });
@@ -61,6 +65,10 @@ client.once('ready', async () => {
     startDatabaseUpdater(client);
     LogEvent('Database Updater Started', 'Info');
 
+    // Setup audit logs monitoring
+    setupAuditLogs(client);
+    LogEvent('Audit Logs Started', 'Info');
+
     // Register slash commands with Discord API
     const rest = new REST({ version: '10' }).setToken(config.discord.botToken);
     const commands = client.commands.map(cmd => cmd.data.toJSON());
@@ -96,33 +104,30 @@ setInterval(() => {
 
 // Event: Command interaction
 client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isCommand()) return;
+    if (interaction.isCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command) {
+            LogEvent('Command Not Found', 'Error', { commandName: interaction.commandName });
+            return;
+        }
 
-    console.log(`Received command: ${interaction.commandName}`);
-    console.log(client.commands.has(interaction.commandName));
+        try {
+            LogEvent('Command Executed', 'Info', {
+                userId: interaction.user.id,
+                username: interaction.user.tag,
+                command: interaction.commandName,
+                timestamp: new Date().toISOString()
+            });
 
-    const command = client.commands.get(interaction.commandName);
-    if (!command) {
-        LogEvent('Command Not Found', 'Error', { commandName: interaction.commandName });
-        return;
-    }
+            await command.execute(interaction);
+        } catch (error) {
+            LogEvent('Command Execution Error', 'Error', { commandName: interaction.commandName, error: error.message });
 
-    try {
-        LogEvent('Command Executed', 'Info', {
-            userId: interaction.user.id,
-            username: interaction.user.tag,
-            command: interaction.commandName,
-            timestamp: new Date().toISOString()
-        });
-
-        await command.execute(interaction);
-    } catch (error) {
-        LogEvent('Command Execution Error', 'Error', { commandName: interaction.commandName, error: error.message });
-
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp('There was an error executing this command!');
-        } else {
-            await interaction.reply('There was an error executing this command!');
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp('There was an error executing this command!');
+            } else {
+                await interaction.reply('There was an error executing this command!');
+            }
         }
     }
 });
