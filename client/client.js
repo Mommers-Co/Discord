@@ -16,6 +16,7 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages,
         GatewayIntentBits.DirectMessageReactions,
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.GuildMessageTyping,
@@ -96,7 +97,7 @@ client.once('ready', async () => {
     }
 });
 
-
+// Scheduled backup task
 setInterval(() => {
     runBackup(client);
     LogEvent('Backup started', 'Info');
@@ -132,11 +133,8 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Event: When a new member joins the guild
 client.on('guildMemberAdd', async (member) => {
     LogEvent('New Member Joined', 'MemberEvent', { user: member.user.tag, userId: member.id });
-
-    const sixHours = 6 * 60 * 60 * 1000;
 
     try {
         // Check if user is already in the database
@@ -161,18 +159,84 @@ client.on('guildMemberAdd', async (member) => {
 
             await addUserToDatabase(newUser);
             LogEvent('User Added to Database', 'Info', { user: member.user.tag });
+        } else if (user.verifiedStatus) {
+            // User is already verified
+            const welcomeChannel = member.guild.channels.cache.get(config.discord.channels.mainEntranceChannelId);
+            if (welcomeChannel) {
+                const welcomeEmbed = new EmbedBuilder()
+                    .setColor('#00FF00')
+                    .setTitle('Welcome Back!')
+                    .setDescription(`Welcome back, ${member.user.tag}! We're glad to see you again.`)
+                    .setThumbnail(member.user.displayAvatarURL())
+                    .setTimestamp();
+                
+                await welcomeChannel.send({ embeds: [welcomeEmbed] });
+                LogEvent('Welcome Back Message Sent', 'Info', { user: member.user.tag });
+            }
+            return; // Exit the function if the user is already verified
         }
 
-        const welcomeChannel = member.guild.channels.cache.get(config.discord.welcomeChannelId);
-        if (welcomeChannel) {
-            await welcomeChannel.send(`Welcome to the server, ${member.user.tag}!`);
-        }
+        // Send the verification message to the user as an embed
+        const dmChannel = await member.createDM();
+        const verificationEmbed = new EmbedBuilder()
+            .setColor('#FFCC00')
+            .setTitle('Verification Required')
+            .setDescription(`Welcome to the server, ${member.user.tag}! Please react with ✅ to verify your account.`)
+            .setThumbnail(member.user.displayAvatarURL())
+            .setTimestamp();
 
-        // Check if user was added recently
-        if (new Date() - member.user.createdAt < sixHours) {
-            await member.kick('Account was created less than 6 hours ago');
-            LogEvent('User Kicked', 'Security', { user: member.user.tag, reason: 'Account created less than 6 hours ago' });
-        }
+        const verificationMessage = await dmChannel.send({ embeds: [verificationEmbed] });
+
+        LogEvent('Verification Embed Sent to DM', 'Info', { user: member.user.tag });
+
+        // React to the message to trigger user verification
+        await verificationMessage.react('✅');
+
+        // Create a reaction collector for the verification message
+        const filter = (reaction, user) => {
+            return reaction.emoji.name === '✅' && user.id === member.id;
+        };
+
+        const collector = verificationMessage.createReactionCollector({ filter, time: 15 * 60 * 1000 }); // 15 minutes to verify
+
+        collector.on('collect', async (reaction, user) => {
+            LogEvent('Verification Reaction Collected', 'Info', { user: member.user.tag });
+
+            const verifiedRole = member.guild.roles.cache.get(config.discord.roles.memberRoleId);
+            if (verifiedRole) {
+                await member.roles.add(verifiedRole);
+                await updateUserStatus(member.id, { verifiedStatus: true, verificationDate: new Date().toISOString() });
+                LogEvent('User Verified', 'Info', { user: member.user.tag });
+
+                // Notify the user of successful verification
+                await member.send(`Thank you for verifying your account, ${member.user.tag}! You now have access to the server.`);
+
+                // Send a welcome message to the main entrance channel
+                const welcomeChannel = member.guild.channels.cache.get(config.discord.channels.mainEntranceChannelId);
+                if (welcomeChannel) {
+                    const welcomeEmbed = new EmbedBuilder()
+                        .setColor('#00FF00')
+                        .setTitle('Welcome!')
+                        .setDescription(`Hello, ${member.user.tag}! Welcome to our server! We're excited to have you here.`)
+                        .setThumbnail(member.user.displayAvatarURL())
+                        .setTimestamp();
+                    
+                    await welcomeChannel.send({ embeds: [welcomeEmbed] });
+                    LogEvent('Welcome Message Sent to Main Entrance Channel', 'Info', { user: member.user.tag });
+                }
+            } else {
+                LogEvent('Verified Role Not Found', 'Error', { user: member.user.tag });
+            }
+
+            collector.stop(); // Stop collecting after successful verification
+        });
+
+        collector.on('end', (collected, reason) => {
+            if (reason === 'time') {
+                LogEvent('Verification Timed Out', 'Info', { user: member.user.tag });
+                member.send('Verification timed out. Please try again by reacting to the verification message.');
+            }
+        });
     } catch (error) {
         LogEvent('Error Handling New Member', 'Error', { user: member.user.tag, error: error.message });
     }
@@ -192,20 +256,16 @@ client.on('guildMemberRemove', async (member) => {
     const farewellChannel = member.guild.channels.cache.get(config.discord.channels.mainEntranceChannelId);
     LogEvent('User left the Server', 'MemberEvent', { user: member.user.tag, userId: member.id });
     
-    // Check if the channel exists before sending the message
-    if (farewellChannel) {
-        await farewellChannel.send({ embeds: [farewellEmbed] });
-        LogEvent('Farewell Message Sent', 'MemberEvent', { user: member.user.tag, userId: member.id });
-    } else {
-        LogEvent('Farewell Message Failed', 'Error', { user: member.user.tag, userId: member.id, error: 'Channel not found' });
+    // Remove their roles and update their status in the database
+    try {
+        await updateUserStatus(member.id, { verifiedStatus: false });
+        LogEvent('User Status Updated to Unverified', 'Info', { user: member.user.tag });
+    } catch (error) {
+        LogEvent('User Status Update Error', 'Error', { user: member.user.tag, error: error.message });
     }
 
-    // Update user status in Appwrite
-    try {
-        await updateUserStatus(member.id, { lastActive: new Date().toISOString(), verifiedStatus: false });
-        LogEvent('User Status Updated in Database', 'MemberEvent', { user: member.user.tag, userId: member.id });
-    } catch (error) {
-        LogEvent('Database Update Error', 'Error', { userId: member.id, username: member.user.tag, error: error.message });
+    if (farewellChannel) {
+        farewellChannel.send({ embeds: [farewellEmbed] });
     }
 });
 
