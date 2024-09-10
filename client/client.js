@@ -217,7 +217,7 @@ client.on('guildMemberAdd', async (member) => {
                 const welcomeEmbed = new EmbedBuilder()
                     .setColor('#00FF00')
                     .setTitle('Welcome!')
-                    .setDescription(`<@${member.id}> to ${member.guild.name}`)
+                    .setDescription(`<@${member.id}> to ${member.guild.name}, We're excited to have you here!`)
                     .setTimestamp();
 
                 const welcomeChannel = member.guild.channels.cache.get(
@@ -257,7 +257,7 @@ client.on('guildMemberRemove', async (member) => {
         const leaveEmbed = new EmbedBuilder()
             .setColor('#FF0000')
             .setTitle('Goodbye!')
-            .setDescription(`${member.user.tag} has left ${member.guild.name}.`)
+            .setDescription(`${member.user.tag} has left ${member.guild.name}, We're sad to see you go!`)
             .setTimestamp();
 
         if (member.guild.id === config.discord.MCOGuild.guildId) {
