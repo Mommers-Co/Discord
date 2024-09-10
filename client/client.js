@@ -181,29 +181,15 @@ client.on('guildMemberAdd', async (member) => {
             LogEvent('User Added to Database', 'Info', { user: member.user.tag, guild: member.guild.name });
         }
 
-        // Welcome message embed
-        const welcomeEmbed = new EmbedBuilder()
-            .setColor('#00FF00')
-            .setTitle(`Welcome to ${member.guild.name}, ${member.user.tag}!`)
-            .setDescription('We are glad to have you here! Please check the rules and verify your account.')
-            .setThumbnail(member.user.displayAvatarURL())
-            .setTimestamp();
-
-        const welcomeChannel = member.guild.channels.cache.get(config.discord.MCOGuild.channels.welcomeChannelId);
-        if (welcomeChannel) {
-            await welcomeChannel.send({ embeds: [welcomeEmbed] });
-        }
-
         const dmChannel = await member.createDM();
         const verificationEmbed = new EmbedBuilder()
             .setColor('#FFCC00')
             .setTitle('Verification Required')
-            .setDescription(`Welcome to the server, ${member.user.tag}! Please react with ✅ to verify your account.`)
+            .setDescription(`Welcome to ${member.guild.name}, ${member.user.tag}! Please react with ✅ to verify your account.`)
             .setThumbnail(member.user.displayAvatarURL())
             .setTimestamp();
 
         const verificationMessage = await dmChannel.send({ embeds: [verificationEmbed] });
-
         LogEvent('Verification Embed Sent to DM', 'Info', { user: member.user.tag, guild: member.guild.name });
 
         await verificationMessage.react('✅');
@@ -214,13 +200,36 @@ client.on('guildMemberAdd', async (member) => {
         collector.on('collect', async () => {
             LogEvent('Verification Reaction Collected', 'Info', { user: member.user.tag, guild: member.guild.name });
 
-            const verifiedRole = member.guild.roles.cache.get(config.discord.MCOGuild.roles.memberRoleId);
+            const verifiedRole = member.guild.roles.cache.get(
+                member.guild.id === config.discord.MCOGuild.guildId 
+                    ? config.discord.MCOGuild.roles.memberRoleId 
+                    : config.discord.MCOLOGGuild.roles.memberRoleId
+            );
+            
             if (verifiedRole) {
                 await member.roles.add(verifiedRole);
                 await updateUserStatus(member.id, { verifiedStatus: true, verificationDate: new Date().toISOString() });
                 LogEvent('User Verified', 'Info', { user: member.user.tag, guild: member.guild.name });
 
                 await member.send(`Thank you for verifying your account, ${member.user.tag}! You now have access to the server.`);
+
+                // Send welcome message after verification
+                const welcomeEmbed = new EmbedBuilder()
+                    .setColor('#00FF00')
+                    .setTitle('Welcome!')
+                    .setDescription(`<@${member.id}> to ${member.guild.name}`)
+                    .setTimestamp();
+
+                const welcomeChannel = member.guild.channels.cache.get(
+                    member.guild.id === config.discord.MCOGuild.guildId 
+                        ? config.discord.MCOGuild.channels.mainEntranceChannelId 
+                        : config.discord.MCOLOGGuild.channels.mainEntranceChannelId
+                );
+                
+                if (welcomeChannel) {
+                    await welcomeChannel.send({ embeds: [welcomeEmbed] });
+                    LogEvent('Welcome Message Sent', 'Info', { user: member.user.tag, guild: member.guild.name });
+                }
             }
         });
 
@@ -235,6 +244,7 @@ client.on('guildMemberAdd', async (member) => {
     }
 });
 
+
 // Handle when a member leaves any guild
 client.on('guildMemberRemove', async (member) => {
     LogEvent('Member Left', 'MemberEvent', { user: member.user.tag, userId: member.id, guild: member.guild.name });
@@ -246,17 +256,26 @@ client.on('guildMemberRemove', async (member) => {
         // Leave message embed
         const leaveEmbed = new EmbedBuilder()
             .setColor('#FF0000')
-            .setTitle(`${member.user.tag} has left ${member.guild.name}.`)
+            .setTitle('Goodbye!')
+            .setDescription(`${member.user.tag} has left ${member.guild.name}.`)
             .setTimestamp();
 
-        const leaveChannel = member.guild.channels.cache.get(config.discord.MCOGuild.channels.leaveChannelId);
-        if (leaveChannel) {
-            await leaveChannel.send({ embeds: [leaveEmbed] });
+        if (member.guild.id === config.discord.MCOGuild.guildId) {
+            const leaveChannel = member.guild.channels.cache.get(config.discord.MCOGuild.channels.mainEntranceChannelId);
+            if (leaveChannel) {
+                await leaveChannel.send({ embeds: [leaveEmbed] });
+            }
+        } else if (member.guild.id === config.discord.MCOLOGGuild.guildId) {
+            const leaveChannel = member.guild.channels.cache.get(config.discord.MCOLOGGuild.channels.mainEntranceChannelId);
+            if (leaveChannel) {
+                await leaveChannel.send({ embeds: [leaveEmbed] });
+            }
         }
     } catch (error) {
         LogEvent('Error Handling Member Leave', 'Error', { user: member.user.tag, guild: member.guild.name, error: error.message });
     }
 });
+
 
 // Log in to Discord with the bot token
 client.login(config.discord.botToken).catch(error => LogEvent('Bot Login Failed', 'Error', { error: error.message }));
