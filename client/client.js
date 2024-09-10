@@ -7,7 +7,8 @@ const { logEvent } = require('../shared/logger');
 const { startServerStatusAlerts } = require('../shared/serverStatusAlerts');
 const schedule = require('node-schedule');
 const { runBackup } = require('../gateway/backup');
-const { setupAuditLogs } = require('./audit.js');
+const setupAuditLogs = require('./audit');
+
 
 const client = new Client({
     intents: [
@@ -84,26 +85,32 @@ client.once('ready', async () => {
         LogEvent('Application Commands Registration Error', 'Error', { message: error.message });
     }
 
-    // Update the bot activity to reflect member count for both guilds
-    for (const guildConfig of [config.discord.MCOGuild, config.discord.MCOLOGGuild]) {
-        const guild = client.guilds.cache.get(guildConfig.guildId);
-        if (guild) {
-            const memberCount = guild.memberCount;
-            try {
-                await client.user.setActivity(`${memberCount} Members in ${guild.name}`, { type: ActivityType.Watching });
-                LogEvent('Bot Activity Updated', 'Info', { guild: guild.name, activity: `Watching ${memberCount} Members` });
-            } catch (error) {
-                LogEvent('Bot Activity Update Error', 'Error', { guild: guild.name, message: error.message });
+    // Function to update the bot's activity
+    async function updateActivity() {
+        for (const guildConfig of [config.discord.MCOGuild, config.discord.MCOLOGGuild]) {
+            const guild = client.guilds.cache.get(guildConfig.guildId);
+            if (guild) {
+                const memberCount = guild.memberCount;
+                try {
+                    await client.user.setActivity(`${memberCount} Members in ${guild.name}`, { type: ActivityType.Watching });
+                    LogEvent('Bot Activity Updated', 'Info', { guild: guild.name, activity: `Watching ${memberCount} Members` });
+                } catch (error) {
+                    LogEvent('Bot Activity Update Error', 'Error', { guild: guild.name, message: error.message });
+                }
             }
         }
     }
+
+    // Update the activity initially and then every 60 seconds
+    await updateActivity();
+    setInterval(updateActivity, 60000);
 });
 
 // Scheduled backup task
-setInterval(() => {
+schedule.scheduleJob(config.discord.backupInterval, () => {
     runBackup(client);
     LogEvent('Backup started', 'Info');
-}, config.discord.backupInterval);
+});
 
 // Event: Command interaction
 client.on('interactionCreate', async (interaction) => {
@@ -243,4 +250,3 @@ client.on('guildMemberRemove', async (member) => {
 
 // Log in to Discord with the bot token
 client.login(config.discord.botToken).catch(error => LogEvent('Bot Login Failed', 'Error', { error: error.message }));
-
