@@ -85,10 +85,16 @@ client.once('ready', async () => {
         LogEvent('Application Commands Registration Error', 'Error', { message: error.message });
     }
 
-    // Function to update the bot's activity
+    // Function to update bot activity
     async function updateActivity() {
-        for (const guildConfig of [config.discord.MCOGuild, config.discord.MCOLOGGuild]) {
+    const guildConfigs = [config.discord.MCOGuild, config.discord.MCOLOGGuild];
+    let index = 0;
+
+        // Update activity every 60 seconds
+        setInterval(async () => {
+            const guildConfig = guildConfigs[index];
             const guild = client.guilds.cache.get(guildConfig.guildId);
+
             if (guild) {
                 const memberCount = guild.memberCount;
                 try {
@@ -97,13 +103,17 @@ client.once('ready', async () => {
                 } catch (error) {
                     LogEvent('Bot Activity Update Error', 'Error', { guild: guild.name, message: error.message });
                 }
+            } else {
+                LogEvent('Bot Activity Update Error', 'Error', { guild: guildConfig.guildId, message: 'Guild not found' });
             }
-        }
+
+            // Switch to the next guild config
+            index = (index + 1) % guildConfigs.length;
+        }, 60000); // 60 seconds
     }
 
-    // Update the activity initially and then every 60 seconds
-    await updateActivity();
-    setInterval(updateActivity, 60000);
+    // Call the function to start updating activity
+    updateActivity();
 });
 
 // Scheduled backup task
