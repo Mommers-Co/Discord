@@ -225,18 +225,34 @@ async function sendWebhookMessage(webhookURL, payload) {
 
 async function getLastSentPost() {
     logEvent('Retrieving last sent post'); // Log the retrieval of the last post
-    // Implement the logic to read the last sent post link from storage (file or database)
-    // For example, it could be a JSON file:
-    const data = await fs.promises.readFile('lastSentPost.json', 'utf-8');
-    return JSON.parse(data).lastPostLink;
+    try {
+        // Check if the file exists
+        await fs.promises.access('lastSentPost.json');
+        
+        // Read the last sent post link from storage (file or database)
+        const data = await fs.promises.readFile('lastSentPost.json', 'utf-8');
+        return JSON.parse(data).lastPostLink;
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            logEvent('No previous post found, starting fresh'); // Log if the file doesn't exist
+            return ''; // Return default value if the file doesn't exist
+        } else {
+            logEvent(`Error retrieving last sent post: ${error.message}`, 'error');
+            throw error;
+        }
+    }
 }
 
 async function saveLastSentPost(link) {
     logEvent('Saving last sent post'); // Log the saving of the last post
-    // Implement the logic to save the last sent post link to storage (file or database)
-    // For example, save to a JSON file:
-    const data = { lastPostLink: link };
-    await fs.promises.writeFile('lastSentPost.json', JSON.stringify(data, null, 2));
+    try {
+        const data = { lastPostLink: link };
+        await fs.promises.writeFile('lastSentPost.json', JSON.stringify(data, null, 2));
+        logEvent('Last sent post saved successfully'); // Log success after saving
+    } catch (error) {
+        logEvent(`Error saving last sent post: ${error.message}`, 'error');
+        throw error;
+    }
 }
 
 // Handle when a new member joins any guild
