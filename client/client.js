@@ -2,6 +2,9 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuil
 const fs = require('fs');
 const path = require('path');
 const config = require('../config.json');
+const Parser = require('rss-parser');
+const parser = new Parser();
+const fetch = require('node-fetch');
 const { addUserToDatabase, getUserByDiscordId, updateUserStatus, startDatabaseUpdater } = require('../gateway/appwrite');
 const { logEvent } = require('../shared/logger');
 const { startServerStatusAlerts } = require('../shared/serverStatusAlerts');
@@ -70,6 +73,10 @@ client.once('ready', async () => {
     // Setup audit logs monitoring
     setupAuditLogs(client);
     LogEvent('Audit Logs Started', 'Info');
+
+    // SCS News for blogs
+    checkForNews(); // Initial check on bot startup
+    setInterval(checkForNews, 60 * 60 * 1000); // Check every hour
 
     // Register slash commands with Discord API
     const rest = new REST({ version: '10' }).setToken(config.discord.botToken);
@@ -152,6 +159,78 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 });
+
+// SCS Blog Gathering
+async function checkForNews() {
+    try {
+        logEvent('Fetching SCS Blog feed'); // Log the event of fetching the blog feed
+
+        const feed = await parser.parseURL('https://blog.scssoft.com/feeds/posts/default');
+        const latestPost = feed.items[0]; // Get the most recent post
+        
+        // Check if the latest post has already been sent
+        const lastSentPost = getLastSentPost(); // Function to get the last sent post ID
+        if (lastSentPost !== latestPost.link) {
+            logEvent(`New post found: ${latestPost.title}`); // Log when a new post is found
+
+            // Prepare the embed to send via webhook
+            const messageEmbed = {
+                embeds: [{
+                    title: latestPost.title,
+                    url: latestPost.link,
+                    timestamp: new Date(latestPost.isoDate),
+                    footer: {
+                        text: 'SCS Software Blog',
+                    }
+                }]
+            };
+
+            // Get the webhook URL from the config
+            const webhookURL = config.discord.MCOLOGGuild.SCSNews;
+            
+            // Send the message to the Discord webhook
+            await sendWebhookMessage(webhookURL, messageEmbed);
+            logEvent(`Post sent to Discord: ${latestPost.title}`); // Log the post being sent
+
+            saveLastSentPost(latestPost.link); // Save the link of the latest sent post
+            logEvent('Saved latest post link'); // Log that the post has been saved
+        } else {
+            logEvent('No new post found'); // Log when there are no new posts
+        }
+    } catch (error) {
+        logEvent(`Error fetching the RSS feed: ${error.message}`, 'error'); // Log errors
+        console.error('Error fetching the RSS feed:', error);
+    }
+}
+
+async function sendWebhookMessage(webhookURL, payload) {
+    try {
+        const response = await fetch(webhookURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to send webhook message: ${response.statusText}`);
+        }
+        logEvent('New post sent in newsletters successfully'); // Log successful message sending
+    } catch (error) {
+        logEvent(`Error sending webhook message: ${error.message}`, 'error'); // Log webhook errors
+        console.error('Error sending webhook message:', error);
+    }
+}
+
+function getLastSentPost() {
+    logEvent('Retrieving last sent post'); // Log the retrieval of the last post
+    // Read the last sent post ID from a file or database
+    return ''; // Example placeholder
+}
+
+function saveLastSentPost(link) {
+    logEvent('Saving last sent post'); // Log the saving of the last post
+    // Save the last sent post ID to a file or database
+}
 
 // Handle when a new member joins any guild
 client.on('guildMemberAdd', async (member) => {
