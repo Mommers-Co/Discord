@@ -167,9 +167,10 @@ async function checkForNews() {
 
         const feed = await parser.parseURL('https://blog.scssoft.com/feeds/posts/default');
         const latestPost = feed.items[0]; // Get the most recent post
-        
+
+        const lastSentPost = await getLastSentPost(); // Function to get the last sent post link
+
         // Check if the latest post has already been sent
-        const lastSentPost = getLastSentPost(); // Function to get the last sent post ID
         if (lastSentPost !== latestPost.link) {
             logEvent(`New post found: ${latestPost.title}`); // Log when a new post is found
 
@@ -192,10 +193,11 @@ async function checkForNews() {
             await sendWebhookMessage(webhookURL, messageEmbed);
             logEvent(`Post sent to Discord: ${latestPost.title}`); // Log the post being sent
 
-            saveLastSentPost(latestPost.link); // Save the link of the latest sent post
+            // Save the latest post's link to avoid resending it
+            await saveLastSentPost(latestPost.link);
             logEvent('Saved latest post link'); // Log that the post has been saved
         } else {
-            logEvent('No new post found'); // Log when there are no new posts
+            logEvent('No new post found, already sent the latest post'); // Log when there are no new posts
         }
     } catch (error) {
         logEvent(`Error fetching the RSS feed: ${error.message}`, 'error'); // Log errors
@@ -214,22 +216,27 @@ async function sendWebhookMessage(webhookURL, payload) {
         if (!response.ok) {
             throw new Error(`Failed to send webhook message: ${response.statusText}`);
         }
-        logEvent('New post sent in newsletters successfully'); // Log successful message sending
+        logEvent('Message sent successfully'); // Log successful message sending
     } catch (error) {
         logEvent(`Error sending webhook message: ${error.message}`, 'error'); // Log webhook errors
         console.error('Error sending webhook message:', error);
     }
 }
 
-function getLastSentPost() {
+async function getLastSentPost() {
     logEvent('Retrieving last sent post'); // Log the retrieval of the last post
-    // Read the last sent post ID from a file or database
-    return ''; // Example placeholder
+    // Implement the logic to read the last sent post link from storage (file or database)
+    // For example, it could be a JSON file:
+    const data = await fs.promises.readFile('lastSentPost.json', 'utf-8');
+    return JSON.parse(data).lastPostLink;
 }
 
-function saveLastSentPost(link) {
+async function saveLastSentPost(link) {
     logEvent('Saving last sent post'); // Log the saving of the last post
-    // Save the last sent post ID to a file or database
+    // Implement the logic to save the last sent post link to storage (file or database)
+    // For example, save to a JSON file:
+    const data = { lastPostLink: link };
+    await fs.promises.writeFile('lastSentPost.json', JSON.stringify(data, null, 2));
 }
 
 // Handle when a new member joins any guild
