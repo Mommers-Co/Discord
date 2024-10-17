@@ -1,5 +1,5 @@
 {
-  "name": "Mommers Co | Discord Bot",
+  "name": "mommers-co-discord-bot",
   "version": "1.0.0",
   "main": "client/client.js",
   "scripts": {
@@ -9,12 +9,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Mommers-Co/Discord.git"
+    "url": "https://github.com/username/repo-name.git"
   },
   "keywords": [],
   "author": "Mommers Co | Development Team",
-  "license": "ISC",
-  "description": "Mommers Co | Discord Bot",
+  "license": "MIT",
+  "description": "Mommers Co Discord Bot",
   "dependencies": {
     "appwrite": "^15.0.0",
     "archiver": "^7.0.1",
