@@ -5,7 +5,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon --trace-warnings client/client.js",
-    "start": "node --trace-warnings client/client.js"
+    "start": "node client/client.js",
+    "debug": "node --trace-warnings client/client.js"
   },
   "repository": {
     "type": "git",
