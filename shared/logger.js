@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const fetch = require('node-fetch');
 const config = require('../config.json');
 const zlib = require('zlib');
 const { client } = require('../client/client');
@@ -27,16 +28,18 @@ function ensureLogFile(logFileName) {
     }
 }
 
-function logEvent(eventName, eventCategory = 'General', eventData = '') {
+function logEvent(eventName, eventCategory = 'General', eventData = '', guildId = null) {
     const logEntry = `[${new Date().toLocaleString()}] Event: ${eventName} (${eventCategory}) ${JSON.stringify(eventData)}\n`;
     console.log(logEntry);
     appendLogToFile('general', logEntry); // Default log file name
 
     // Only send critical errors to Discord
     if (eventCategory === 'Error' || eventName.startsWith('ClientError')) {
-        sendLogToDiscord(logEntry, config.discord.discordConsoleId);
+        const channelId = getGuildConfig(guildId).channels.discordConsoleId;
+        sendLogToDiscord(logEntry, channelId, guildId);
     } else if (eventCategory === 'Crash' || eventCategory === 'Debug') {
-        sendLogToDiscord(logEntry, config.discord.logChannelId);
+        const channelId = getGuildConfig(guildId).channels.logChannelId;
+        sendLogToDiscord(logEntry, channelId, guildId);
     }
 }
 
@@ -51,7 +54,20 @@ function appendLogToFile(logFileName, logEntry) {
     });
 }
 
-function sendLogToDiscord(logEntry, channelId = config.discord.discordConsoleId) {
+// Helper function to get guild-specific configuration
+function getGuildConfig(guildId) {
+    if (!guildId || guildId === config.discord.MCOGuild.guildId) {
+        return config.discord.MCOGuild;
+    } else if (guildId === config.discord.MCOLOGGuild.guildId) {
+        return config.discord.MCOLOGGuild;
+    } else {
+        console.error(`Unknown guild ID: ${guildId}`);
+        return null;
+    }
+}
+
+// support multi-guild logging
+function sendLogToDiscord(logEntry, channelId, guildId = null) {
     if (!client || !client.isReady()) {
         console.error(`[${new Date().toLocaleString()}] Discord client not initialized.`);
         logEvent('DiscordError', 'Discord client not initialized', null);
@@ -68,7 +84,14 @@ function sendLogToDiscord(logEntry, channelId = config.discord.discordConsoleId)
 
     DISCORD_MESSAGES_SENT.set(channelId, currentTimestamp);
 
-    const logChannel = client.channels.cache.get(channelId);
+    // Fetch the appropriate guild and channel based on the provided guildId
+    const guildConfig = getGuildConfig(guildId);
+    if (!guildConfig) {
+        return; // If no valid guild is found, exit.
+    }
+
+    const logChannel = client.guilds.cache.get(guildConfig.guildId)?.channels.cache.get(channelId);
+
     if (logChannel) {
         const embed = new EmbedBuilder()
             .setTitle('Log Entry')
@@ -82,11 +105,11 @@ function sendLogToDiscord(logEntry, channelId = config.discord.discordConsoleId)
             })
             .catch(error => {
                 console.error(`[${new Date().toLocaleString()}] Failed to send log entry to channel ${channelId}: ${error}`);
-                logEvent('DiscordError', 'Failed to send log entry', `to channel ${channelId}: ${error}`);
+                logEvent('DiscordError', 'Failed to send log entry', `to channel ${channelId}: ${error}`, guildId);
             });
     } else {
-        console.error(`[${new Date().toLocaleString()}] Log channel ${channelId} not found.`);
-        logEvent('DiscordError', 'Log channel not found', channelId);
+        console.error(`[${new Date().toLocaleString()}] Log channel ${channelId} not found in guild ${guildId}.`);
+        logEvent('DiscordError', 'Log channel not found', channelId, guildId);
     }
 }
 
@@ -138,8 +161,9 @@ function handleCrash(logFileName, error) {
         logEvent('FileError', 'Log file not found for crash export', `${logFileName}.log`);
     }
     fs.writeFileSync(crashLogFilePath, logContent);
-    logEvent('Crash', 'Crash log exported', crashLogFilePath);
-    sendLogToDiscord(`Crash log exported to ${crashLogFilePath}`, config.discord.logChannelId);
+    logEvent('Crash', 'Crash log exported', crashLogFilePath, null);
+    const channelId = getGuildConfig(null).channels.logChannelId;
+    sendLogToDiscord(`Crash log exported to ${crashLogFilePath}`, channelId);
 }
 
 module.exports = { logEvent, compressLogFile, exportLogsOnCrash };

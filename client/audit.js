@@ -1,31 +1,30 @@
-const { Client, EmbedBuilder } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const config = require('../config.json');
 
-// Update this line to fetch the channel ID based on the specific guild
-const LOG_CHANNEL_ID = config.discord.MCOGuild.channels.auditLogsChannelId;
+// Fetch the appropriate log channel ID for the specific guild
+function getLogChannelId(guildId) {
+    if (guildId === config.discord.MCOGuild.guildId) {
+        return config.discord.MCOGuild.channels.auditLogsChannelId;
+    } else if (guildId === config.discord.MCOLOGGuild.guildId) {
+        return config.discord.MCOLOGGuild.channels.auditLogsChannelId;
+    } else {
+        return null; // Handle any additional guilds or invalid IDs
+    }
+}
 
+// Main function to set up audit logs
 function setupAuditLogs(client) {
-    client.on('guildBanAdd', async ban => {
+
+    // Audit Bans
+    client.on('guildBanAdd', async (ban) => {
         try {
             console.log(`Processing guildBanAdd event for user: ${ban.user.tag}`);
-
-            const fetchedLogs = await ban.guild.fetchAuditLogs({
-                limit: 1,
-                type: 22, // Numeric value for MEMBER_BAN_ADD
-            });
+            const fetchedLogs = await ban.guild.fetchAuditLogs({ limit: 1, type: 'MEMBER_BAN_ADD' });
             const banLog = fetchedLogs.entries.first();
 
-            if (!banLog) {
-                const message = `No relevant audit logs were found for ${ban.user.tag}.`;
-                console.log(message);
-                sendLog(ban.guild, 'User Banned', message, ban.user.tag, ban.user.id, null);
-                return;
-            }
-
-            const { executor, target } = banLog;
-            const logMessage = target.id === ban.user.id 
-                ? `${ban.user.tag} was banned by ${executor.tag}.`
-                : `${ban.user.tag} was banned, but the audit log shows a different user was targeted.`;
+            const logMessage = banLog
+                ? `${ban.user.tag} was banned by ${banLog.executor.tag}.`
+                : `No relevant audit logs were found for ${ban.user.tag}.`;
 
             console.log(logMessage);
             sendLog(ban.guild, 'User Banned', logMessage, ban.user.tag, ban.user.id, null);
@@ -34,27 +33,16 @@ function setupAuditLogs(client) {
         }
     });
 
-    client.on('guildBanRemove', async ban => {
+    // Audit Removed Bans
+    client.on('guildBanRemove', async (ban) => {
         try {
             console.log(`Processing guildBanRemove event for user: ${ban.user.tag}`);
-
-            const fetchedLogs = await ban.guild.fetchAuditLogs({
-                limit: 1,
-                type: 23, // Numeric value for MEMBER_BAN_REMOVE
-            });
+            const fetchedLogs = await ban.guild.fetchAuditLogs({ limit: 1, type: 'MEMBER_BAN_REMOVE' });
             const unbanLog = fetchedLogs.entries.first();
 
-            if (!unbanLog) {
-                const message = `No relevant audit logs were found for ${ban.user.tag}.`;
-                console.log(message);
-                sendLog(ban.guild, 'User Unbanned', message, ban.user.tag, ban.user.id, null);
-                return;
-            }
-
-            const { executor, target } = unbanLog;
-            const logMessage = target.id === ban.user.id 
-                ? `${ban.user.tag} was unbanned by ${executor.tag}.`
-                : `${ban.user.tag} was unbanned, but the audit log shows a different user was targeted.`;
+            const logMessage = unbanLog
+                ? `${ban.user.tag} was unbanned by ${unbanLog.executor.tag}.`
+                : `No relevant audit logs were found for ${ban.user.tag}.`;
 
             console.log(logMessage);
             sendLog(ban.guild, 'User Unbanned', logMessage, ban.user.tag, ban.user.id, null);
@@ -63,198 +51,189 @@ function setupAuditLogs(client) {
         }
     });
 
+    // Audit role updates
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
         try {
             console.log(`Processing guildMemberUpdate event for user: ${newMember.user.tag}`);
-
-            const fetchedLogs = await newMember.guild.fetchAuditLogs({
-                limit: 1,
-                type: 24, // Numeric value for MEMBER_ROLE_UPDATE
-            });
+            const fetchedLogs = await newMember.guild.fetchAuditLogs({ limit: 1, type: 'MEMBER_UPDATE' });
             const roleUpdateLog = fetchedLogs.entries.first();
 
-            if (!roleUpdateLog) {
-                const message = `No relevant audit logs were found for ${newMember.user.tag}.`;
-                console.log(message);
-                sendLog(newMember.guild, 'Roles Updated', message, newMember.user.tag, newMember.user.id, null);
-                return;
-            }
-
-            const { executor, target } = roleUpdateLog;
-
-            if (target.id === newMember.user.id) {
-                const oldRoles = oldMember.roles.cache.map(role => role.id);
-                const newRoles = newMember.roles.cache.map(role => role.id);
-                const addedRoles = newRoles.filter(roleId => !oldRoles.includes(roleId)).map(roleId => newMember.guild.roles.cache.get(roleId)?.name || 'Unknown');
-                const removedRoles = oldRoles.filter(roleId => !newRoles.includes(roleId)).map(roleId => oldMember.guild.roles.cache.get(roleId)?.name || 'Unknown');
+            if (roleUpdateLog && roleUpdateLog.target.id === newMember.user.id) {
+                const oldRoles = oldMember.roles.cache.map((role) => role.name);
+                const newRoles = newMember.roles.cache.map((role) => role.name);
+                const addedRoles = newRoles.filter((role) => !oldRoles.includes(role));
+                const removedRoles = oldRoles.filter((role) => !newRoles.includes(role));
 
                 let logMessage = '';
-
-                addedRoles.forEach(roleName => {
-                    logMessage += `${roleName} was added to ${newMember.user.tag} by ${executor.tag}\n`;
+                addedRoles.forEach((role) => {
+                    logMessage += `${role} was added to ${newMember.user.tag} by ${roleUpdateLog.executor.tag}\n`;
+                });
+                removedRoles.forEach((role) => {
+                    logMessage += `${role} was removed from ${newMember.user.tag} by ${roleUpdateLog.executor.tag}\n`;
                 });
 
-                removedRoles.forEach(roleName => {
-                    logMessage += `${roleName} was removed from ${newMember.user.tag} by ${executor.tag}\n`;
-                });
-
-                if (!addedRoles.length && !removedRoles.length) {
+                if (!logMessage) {
                     logMessage = `No roles were added or removed for ${newMember.user.tag}.`;
                 }
 
                 console.log(logMessage);
                 sendLog(newMember.guild, 'Roles Updated', logMessage, newMember.user.tag, newMember.user.id, null);
-            } else {
-                const message = `The audit log shows a different user was targeted for role updates of ${newMember.user.tag}.`;
-                console.log(message);
-                sendLog(newMember.guild, 'Roles Updated', message, newMember.user.tag, newMember.user.id, null);
             }
         } catch (error) {
             console.error('Error fetching audit logs for role update:', error.message);
         }
     });
 
-    client.on('messageDelete', async message => {
+    // Audit role creation
+    client.on('roleCreate', async (role) => {
         try {
-            console.log(`Processing messageDelete event for message by ${message.author.tag}`);
-
-            const fetchedLogs = await message.guild.fetchAuditLogs({
-                limit: 1,
-                type: 72, // Numeric value for MESSAGE_DELETE
-            });
-            const deletionLog = fetchedLogs.entries.first();
-
-            const messageContent = message.content ? message.content : 'No content';
-
-            let logMessage;
-            if (!deletionLog) {
-                logMessage = `**Content:** ${messageContent}`;
-            } else {
-                const { executor, target } = deletionLog;
-                logMessage = target.id === message.author.id 
-                    ? `Message by ${message.author.tag} was deleted by ${executor.tag}.\n**Content:** ${messageContent}`
-                    : `Message by ${message.author.tag} was deleted, but the audit log shows a different user was targeted.\n**Content:** ${messageContent}`;
-            }
+            const logMessage = `Role ${role.name} was created.`;
             console.log(logMessage);
-            sendLog(message.guild, 'Message Deleted', logMessage, message.author.tag, message.author.id, message.channel);
+            sendLog(role.guild, 'Role Created', logMessage, null, null, null);
         } catch (error) {
-            console.error('Error fetching audit logs for message delete:', error.message);
+            console.error('Error logging role creation:', error.message);
         }
     });
 
+    // Audit role deletion
+    client.on('roleDelete', async (role) => {
+        try {
+            const logMessage = `Role ${role.name} was deleted.`;
+            console.log(logMessage);
+            sendLog(role.guild, 'Role Deleted', logMessage, null, null, null);
+        } catch (error) {
+            console.error('Error logging role deletion:', error.message);
+        }
+    });
+
+    // Audit channel creation
+    client.on('channelCreate', async (channel) => {
+        try {
+            const logMessage = `Channel ${channel.name} was created.`;
+            console.log(logMessage);
+            sendLog(channel.guild, 'Channel Created', logMessage, null, null, channel);
+        } catch (error) {
+            console.error('Error logging channel creation:', error.message);
+        }
+    });
+
+    // Audit channel deletion
+    client.on('channelDelete', async (channel) => {
+        try {
+            const logMessage = `Channel ${channel.name} was deleted.`;
+            console.log(logMessage);
+            sendLog(channel.guild, 'Channel Deleted', logMessage, null, null, channel);
+        } catch (error) {
+            console.error('Error logging channel deletion:', error.message);
+        }
+    });
+
+    // Audit message sent
+    client.on('messageCreate', async (message) => {
+        try {
+            if (message.author.bot) return; // Ignore bot messages
+            const logMessage = `Message sent by ${message.author.tag}:\n**Content:** ${message.content}`;
+            console.log(logMessage);
+            sendLog(message.guild, 'Message Sent', logMessage, message.author.tag, message.author.id, message.channel);
+        } catch (error) {
+            console.error('Error logging message send:', error.message);
+        }
+    });
+
+    // Audit message edits
     client.on('messageUpdate', async (oldMessage, newMessage) => {
         try {
-            if (oldMessage.content === newMessage.content) return;
-
-            console.log(`Processing messageUpdate event for message by ${newMessage.author.tag}`);
-
-            const fetchedLogs = await newMessage.guild.fetchAuditLogs({
-                limit: 1,
-                type: 74, // Numeric value for MESSAGE_UPDATE
-            });
-            const editLog = fetchedLogs.entries.first();
-
-            const messageLink = `https://discord.com/channels/${newMessage.guild.id}/${newMessage.channel.id}/${newMessage.id}`;
-
-            const logMessage = `**Before:** ${oldMessage.content}\n**After:** ${newMessage.content}\n[Message Link](${messageLink})`;
+            if (newMessage.author.bot) return; // Ignore bot messages
+            const logMessage = `Message edited by ${newMessage.author.tag}:\n**Old Content:** ${oldMessage.content}\n**New Content:** ${newMessage.content}`;
             console.log(logMessage);
             sendLog(newMessage.guild, 'Message Edited', logMessage, newMessage.author.tag, newMessage.author.id, newMessage.channel);
         } catch (error) {
-            console.error('Error fetching audit logs for message update:', error.message);
+            console.error('Error logging message edit:', error.message);
         }
     });
 
-    client.on('messageCreate', async message => {
-        if (message.author.bot) return;
-
-        const messageLink = `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`;
-        const logMessage = `**Content:** ${message.content}\n[Message Link](${messageLink})`;
-        console.log(logMessage);
-        sendLog(message.guild, 'Message Sent', logMessage, message.author.tag, message.author.id, message.channel);
-    });
-
-    client.on('channelCreate', async channel => {
+    // Audit message deletion
+    client.on('messageDelete', async (message) => {
+        if (!message.guild) return; // Ensure the message is from a guild
+    
+        // Fetch audit logs for the deletion
         try {
-            console.log(`Processing channelCreate event for channel: ${channel.name}`);
-            const logMessage = `**Channel Name:** ${channel.name}\n**Channel ID:** ${channel.id}`;
-            sendLog(channel.guild, 'Channel Created', logMessage, 'N/A', 'N/A', channel);
+            const fetchedLogs = await message.guild.fetchAuditLogs({
+                limit: 1,
+                type: 72, // Action type for message delete
+            });
+    
+            const deletionLog = fetchedLogs.entries.first();
+            if (!deletionLog) {
+                console.log(`No logs found for message delete: ${message.id}`);
+                return;
+            }
+    
+            const { executor, target } = deletionLog;
+    
+            // Check if target is not null
+            if (!target) {
+                console.log(`No target found for message delete log entry.`);
+                return;
+            }
+    
+            // Check if the target is the deleted message author
+            if (target.id === message.author.id) {
+                console.log(`Message deleted by ${executor.tag}: ${message.content}`);
+                // Call your sendLog function
+                sendLog(message.guild, 'Message Delete', message.content, message.author.tag, message.author.id);
+            } else {
+                console.log('Message deleted, but the executor is not the author of the message.');
+            }
+    
+            // Optionally check if executor is a bot and log
+            if (executor) {
+                const member = message.guild.members.cache.get(executor.id);
+                if (member && member.user.bot) {
+                    console.log(`${executor.tag} is a bot.`);
+                } else {
+                    console.log(`${executor.tag} is not a bot.`);
+                }
+            } else {
+                console.log(`No executor found for the message delete log.`);
+            }
         } catch (error) {
-            console.error('Error processing channelCreate event:', error.message);
+            console.error(`Error fetching audit logs for message delete: ${error.message}`);
         }
-    });
-
-    client.on('channelUpdate', async (oldChannel, newChannel) => {
-        try {
-            if (oldChannel.name === newChannel.name) return;
-
-            console.log(`Processing channelUpdate event for channel: ${oldChannel.name}`);
-            const logMessage = `**Old Name:** ${oldChannel.name}\n**New Name:** ${newChannel.name}\n**Channel ID:** ${newChannel.id}`;
-            sendLog(newChannel.guild, 'Channel Updated', logMessage, 'N/A', 'N/A', newChannel);
-        } catch (error) {
-            console.error('Error processing channelUpdate event:', error.message);
-        }
-    });
-
-    client.on('channelDelete', async channel => {
-        try {
-            console.log(`Processing channelDelete event for channel: ${channel.name}`);
-            const logMessage = `**Channel Name:** ${channel.name}\n**Channel ID:** ${channel.id}`;
-            sendLog(channel.guild, 'Channel Deleted', logMessage, 'N/A', 'N/A', channel);
-        } catch (error) {
-            console.error('Error processing channelDelete event:', error.message);
-        }
-    });
-
-    client.on('roleCreate', async role => {
-        try {
-            console.log(`Processing roleCreate event for role: ${role.name}`);
-            const logMessage = `**Role Name:** ${role.name}\n**Role ID:** ${role.id}`;
-            sendLog(role.guild, 'Role Created', logMessage, 'N/A', 'N/A', role);
-        } catch (error) {
-            console.error('Error processing roleCreate event:', error.message);
-        }
-    });
-
-    client.on('roleUpdate', async (oldRole, newRole) => {
-        try {
-            if (oldRole.name === newRole.name) return;
-
-            console.log(`Processing roleUpdate event for role: ${oldRole.name}`);
-            const logMessage = `**Old Name:** ${oldRole.name}\n**New Name:** ${newRole.name}\n**Role ID:** ${newRole.id}`;
-            sendLog(newRole.guild, 'Role Updated', logMessage, 'N/A', 'N/A', newRole);
-        } catch (error) {
-            console.error('Error processing roleUpdate event:', error.message);
-        }
-    });
-
-    client.on('roleDelete', async role => {
-        try {
-            console.log(`Processing roleDelete event for role: ${role.name}`);
-            const logMessage = `**Role Name:** ${role.name}\n**Role ID:** ${role.id}`;
-            sendLog(role.guild, 'Role Deleted', logMessage, 'N/A', 'N/A', role);
-        } catch (error) {
-            console.error('Error processing roleDelete event:', error.message);
-        }
-    });
+    });    
 }
 
-function sendLog(guild, eventType, message, userTag, userId, extra) {
-    const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (!logChannel) return;
+// Send log messages to the configured log channel
+function sendLog(guild, eventType, message, userTag, userId, channel) {
+    const logChannelId = getLogChannelId(guild.id);
+    if (!logChannelId) {
+        console.error(`No log channel configured for guild: ${guild.id}`);
+        return;
+    }
+
+    const logChannel = guild.channels.cache.get(logChannelId);
+    if (!logChannel) {
+        console.error(`Log channel with ID ${logChannelId} not found in guild: ${guild.id}`);
+        return;
+    }
 
     const embed = new EmbedBuilder()
         .setTitle(`Event: ${eventType}`)
         .setDescription(message)
-        .addField('User', userTag || 'N/A', true)
-        .addField('User ID', userId || 'N/A', true)
+        .addFields(
+            { name: 'User', value: userTag || 'N/A', inline: true },
+            { name: 'User ID', value: userId || 'N/A', inline: true }
+        )
         .setTimestamp()
-        .setColor('#FF0000');
+        .setColor('#0099ff');
 
-    if (extra) {
-        embed.addField('Additional Info', extra.toString() || 'N/A');
+    if (channel) {
+        embed.addFields({ name: 'Channel', value: channel.toString() });
     }
 
-    logChannel.send({ embeds: [embed] });
+    logChannel.send({ embeds: [embed] })
+        .catch(err => console.error('Error sending log message:', err));
 }
 
+// Export setupAuditLogs function
 module.exports = setupAuditLogs;
