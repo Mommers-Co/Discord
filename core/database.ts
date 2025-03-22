@@ -8,6 +8,7 @@ const config = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
 // Define the interface for the User attributes
 interface UserAttributes {
     discordUserId: string;
+    guildId: string;
     username: string;
     JoinedAt: string;
     verifiedStatus: boolean;
@@ -36,6 +37,7 @@ interface GuildSettingsCreationAttributes extends Optional<GuildSettingsAttribut
 
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
     public discordUserId!: string;
+    public guildId!: string;
     public username!: string;
     public JoinedAt!: string;
     public verifiedStatus!: boolean;
@@ -76,6 +78,10 @@ class Database {
         this.User = User.init(
             {
                 discordUserId: {
+                    type: DataTypes.STRING,
+                    primaryKey: true,
+                },
+                guildId: {
                     type: DataTypes.STRING,
                     primaryKey: true,
                 },
@@ -172,9 +178,9 @@ class Database {
         }
     }
 
-    // Fetch a user by Discord ID
-    async getUserByDiscordId(discordUserId: string) {
-        return await this.User.findOne({ where: { discordUserId } });
+    // Fetch a user by Discord ID and Guild ID
+    async getUserByDiscordIdAndGuildId(discordUserId: string, guildId: string) {
+        return await this.User.findOne({ where: { discordUserId, guildId } });
     }
 
     // Add a new user to the database
@@ -182,12 +188,13 @@ class Database {
         return await this.User.create(newUser);
     }
 
-    // Check if a user exists by Discord ID and add them if not
-    async ensureUserExists(discordUserId: string, member: any) {
-        const existingUser = await this.getUserByDiscordId(discordUserId);
+    // Check if a user exists by Discord ID and Guild ID, and add them if not
+    async ensureUserExists(discordUserId: string, guildId: string, member: any) {
+        const existingUser = await this.getUserByDiscordIdAndGuildId(discordUserId, guildId);
         if (!existingUser) {
             const newUser: UserAttributes = {
                 discordUserId: member.id,
+                guildId,
                 username: member.user.username,
                 JoinedAt: member.joinedAt?.toISOString() ?? '',
                 verifiedStatus: false,
@@ -203,14 +210,14 @@ class Database {
             };
 
             await this.addUserToDatabase(newUser);
-            Logger.info(`Added user ${member.user.tag} to the database.`);
+            Logger.info(`Added user ${member.user.tag} to the database for guild ${guildId}.`);
         }
     }
 
     // Update a user's status or other information in the database
-    async updateUserStatus(discordUserId: string, newStatus: Partial<UserAttributes>) {
+    async updateUserStatus(discordUserId: string, guildId: string, newStatus: Partial<UserAttributes>) {
         return await this.User.update(newStatus, {
-            where: { discordUserId },
+            where: { discordUserId, guildId },
         });
     }
 

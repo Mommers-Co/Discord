@@ -46,7 +46,7 @@ client.once('ready', async () => {
                 const members = await guild.members.fetch();
                 members.forEach(async (member: GuildMember) => {
                     try {
-                        await UserService.ensureUserExists(member);  // Ensure user exists in DB
+                        await UserService.ensureUserExists(client, member);  // Pass client and member
                     } catch (error) {
                         Logger.error(`Error ensuring user exists in DB for member ${member.id}: ${error}`);
                     }

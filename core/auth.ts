@@ -16,12 +16,13 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
     Logger.info('New Member Joined', { user: member.user.tag, userId: member.id, guild: member.guild.name });
 
     try {
-        const user = await getUserByDiscordId(member.id);
+        const user = await getUserByDiscordId(member.id, member.guild.id);
 
         // If user is new, add them to the database
         if (!user) {
             const newUser = {
                 discordUserId: member.id,
+                guildId: member.guild.id,
                 username: member.user.tag,
                 JoinedAt: new Date().toISOString(),
                 verifiedStatus: false,
@@ -67,7 +68,7 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
 
             if (verifiedRole) {
                 await member.roles.add(verifiedRole);
-                await updateUserStatus(member.id, { verifiedStatus: true, verificationDate: new Date().toISOString() });
+                await updateUserStatus(member.id, member.guild.id, { verifiedStatus: true, verificationDate: new Date().toISOString() });
                 Logger.info('User Verified', { user: member.user.tag, guild: member.guild.name });
 
                 // Send a thank-you message to the user
@@ -113,7 +114,7 @@ export const handleMemberLeave = async (client: Client, member: GuildMember) => 
     Logger.info('Member Left', { user: member.user.tag, userId: member.id, guild: member.guild.name });
 
     try {
-        await updateUserStatus(member.id, { verifiedStatus: false });
+        await updateUserStatus(member.id, member.guild.id, { verifiedStatus: false });
         Logger.info('User Status Updated to Unverified', { user: member.user.tag, guild: member.guild.name });
 
         const leaveEmbed = new EmbedBuilder()
