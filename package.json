@@ -1,35 +1,35 @@
 {
   "name": "mommers-co-discord-bot",
   "version": "1.0.0",
-  "main": "client/client.js",
+  "main": "./core/index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon --trace-warnings client/client.js",
-    "start": "node client/client.js",
-    "debug": "node --trace-warnings client/client.js"
+    "dev": "nodemon core/index.ts",
+    "start": "ts-node-dev --respawn --transpileOnly ./core/index.ts"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/username/repo-name.git"
+    "url": "https://github.com/Mommers-Co/Discord.git"
   },
   "keywords": [],
   "author": "Mommers Co | Development Team",
   "license": "MIT",
   "description": "Mommers Co Discord Bot",
   "dependencies": {
-    "appwrite": "^15.0.0",
-    "archiver": "^7.0.1",
-    "crypto": "^1.0.1",
     "discord.js": "^14.16.3",
-    "dotenv": "^16.4.5",
     "fs-extra": "^11.2.0",
     "moment": "^2.30.1",
-    "node-appwrite": "^13.0.0",
-    "node-fetch": "^2.7.0",
+    "mongoose": "^8.12.2",
     "node-schedule": "^2.1.1",
-    "nodemon": "^3.1.4",
+    "pg": "^8.14.1",
+    "pg-hstore": "^2.3.4",
     "rss-parser": "^3.13.0",
-    "systeminformation": "^5.22.11",
-    "unzipper": "^0.12.3"
+    "sequelize": "^6.37.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.11",
+    "nodemon": "^3.1.4",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.8.2"
   }
 }
