@@ -1,12 +1,15 @@
 import { Client, GuildMember, EmbedBuilder } from 'discord.js';
 import Logger from './logger';
 import { getUserByDiscordId, addUserToDatabase, updateUserStatus } from './database';
-import config from '../config.json'; // Import config file
+import config from '../config.json';
 
 // Function to handle new member joining the server
 export const handleNewMemberJoin = async (client: Client, member: GuildMember) => {
     // Dynamically get the guild configuration from config.json using the guild ID
     const guildConfig = Object.values(config.discord).find(guild => guild.guildId === member.guild.id);
+
+    // Log the result of the configuration lookup
+    Logger.info('Guild Config Lookup', { guildId: member.guild.id, foundConfig: !!guildConfig });
 
     // Check if the configuration for the guild exists
     if (!guildConfig) {

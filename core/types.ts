@@ -2,6 +2,7 @@ import { CommandInteraction } from "discord.js";
 
 // Defines the settings of each guild
 export interface GuildSettings {
+    guildId: string; 
     prefix: string;
     allowedRoles: string[];
     logChannelId?: string;

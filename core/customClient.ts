@@ -1,5 +1,6 @@
-import { Client, ClientOptions, Collection, CommandInteraction, Guild } from 'discord.js';
+import { Client, ClientOptions, Collection, CommandInteraction } from 'discord.js';
 import { GuildSettings } from './types';
+
 // Define a custom Command type
 interface Command {
     data: {
@@ -15,7 +16,7 @@ class CustomClient extends Client {
     commands: Collection<string, Command>;   // For storing commands by name
 
     constructor(options: ClientOptions) {
-        super(options); 
+        super(options);
         this.guildSettings = new Collection<string, GuildSettings>();   // Initialize guildSettings as a Collection
         this.commands = new Collection<string, Command>();        // Initialize commands as a Collection
     }
