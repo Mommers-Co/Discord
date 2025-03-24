@@ -1,5 +1,5 @@
 import CustomClient from './customClient';
-import { Client, GatewayIntentBits, Collection, Guild, GuildMember, OAuth2Guild } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Guild, GuildMember, OAuth2Guild, ActivityType } from 'discord.js';
 import fs from 'fs';
 import Logger from './logger';
 import Database from './database';
@@ -57,6 +57,8 @@ client.once('ready', async () => {
             }
         }
 
+        updatePresence(client);
+
     } catch (error: unknown) {
         if (error instanceof Error) {
             Logger.error(`Error while connecting to the database or loading guild settings: ${error.message}`);
@@ -65,6 +67,28 @@ client.once('ready', async () => {
         }
     }
 });
+
+// Function to update the bot's presence with the number of non-bot members
+const updatePresence = (client: Client) => {
+    const guilds = client.guilds.cache;
+    
+    // Iterate over each guild the bot is a part of
+    guilds.forEach((guild) => {
+        // Filter out bot members and count the rest
+        const memberCount = guild.members.cache.filter((member) => !member.user.bot).size;
+        
+        // Set the presence for the bot (e.g., Watching 48 Members in Mommers Co)
+        client.user?.setPresence({
+            activities: [{
+                name: `Watching ${memberCount} Members in ${guild.name}`,
+                type: ActivityType.Watching, // Use ActivityType.Watching here
+            }],
+            status: 'online', // You can customize this to 'dnd' (Do Not Disturb), 'idle', etc.
+        });
+
+        Logger.info(`Set presence for ${guild.name}: Watching ${memberCount} Members.`);
+    });
+};
 
 // Log in using the bot token from the config
 client.login(config.discord.botToken).catch((err) => {
