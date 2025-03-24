@@ -1,10 +1,11 @@
 import CustomClient from './customClient';
-import { GatewayIntentBits, ActivityType, Collection, Client } from 'discord.js';
+import { GatewayIntentBits, ActivityType, Collection, Client, GuildMember, PartialGuildMember } from 'discord.js';
 import fs from 'fs';
 import Logger from './logger';
 import Database from './database';
 import UserService from './userService';
 import { GuildSettings } from './types';
+import { handleNewMemberJoin, handleMemberLeave } from './auth';
 
 // Load the configuration (with guild settings from config.json)
 const config = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
@@ -105,6 +106,26 @@ const updatePresence = (client: CustomClient) => {
         }
     });
 };
+
+client.on('guildMemberAdd', async (member: GuildMember | PartialGuildMember) => {
+    if (member instanceof GuildMember) {
+        await handleNewMemberJoin(client, member);
+    } else {
+        // Fetch the full GuildMember if it's a PartialGuildMember
+        const fullMember = await member.guild.members.fetch(member.id);
+        await handleNewMemberJoin(client, fullMember);
+    }
+});
+
+client.on('guildMemberRemove', async (member: GuildMember | PartialGuildMember) => {
+    if (member instanceof GuildMember) {
+        await handleMemberLeave(client, member);
+    } else {
+        // Fetch the full GuildMember if it's a PartialGuildMember
+        const fullMember = await member.guild.members.fetch(member.id);
+        await handleMemberLeave(client, fullMember);
+    }
+});
 
 // Log in using the bot token from the config
 client.login(config.discord.botToken).catch((err) => {

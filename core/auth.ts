@@ -1,29 +1,37 @@
 import { Client, GuildMember, EmbedBuilder } from 'discord.js';
 import Logger from './logger';
-import { getUserByDiscordId, addUserToDatabase, updateUserStatus } from './database';
-import config from '../config.json';
+import * as fs from 'fs';
+import Database from './database';
+
+const config = JSON.parse(fs.readFileSync('config.json', 'utf-8')) as { discord: { [key: string]: { guildId: string; roles: { memberRoleId: string; staffRoleId: string }; channels: { mainEntranceChannelId: string; leaveLogChannelId: string } } } };
+
+// Define types for guildConfig and user
+interface GuildConfig {
+    guildId: string;
+    roles: {
+        memberRoleId: string;
+        staffRoleId: string;
+    };
+    channels: {
+        mainEntranceChannelId: string;
+        leaveLogChannelId: string;
+    };
+}
 
 // Function to handle new member joining the server
 export const handleNewMemberJoin = async (client: Client, member: GuildMember) => {
-    // Dynamically get the guild configuration from config.json using the guild ID
-    const guildConfig = Object.values(config.discord).find(guild => guild.guildId === member.guild.id);
+    const guildConfig = Object.values(config.discord).find(guild => guild.guildId === member.guild.id) as GuildConfig;
 
-    // Log the result of the configuration lookup
-    Logger.info('Guild Config Lookup', { guildId: member.guild.id, foundConfig: !!guildConfig });
-
-    // Check if the configuration for the guild exists
     if (!guildConfig) {
-        Logger.error('Guild Configuration Missing', { guildId: member.guild.id });
+        Logger.error(`Guild configuration missing for ${member.guild.name} (ID: ${member.guild.id})`);
         return;
     }
 
-    Logger.info('New Member Joined', { user: member.user.tag, userId: member.id, guild: member.guild.name });
+    Logger.info(`New member joined: ${member.user.tag} in ${member.guild.name}`);
 
     try {
-        // Check if the user already exists in the database for this specific guild
-        const user = await getUserByDiscordId(member.id, member.guild.id);
+        const user = await Database.getUserByDiscordIdAndGuildId(member.id, member.guild.id);
 
-        // If the user is not in the database for the current guild, add them
         if (!user) {
             const newUser = {
                 discordUserId: member.id,
@@ -42,26 +50,19 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
                 ticketIds: [],
             };
 
-            await addUserToDatabase(newUser);
-            Logger.info('User Added to Database', { user: member.user.tag, guild: member.guild.name });
+            await Database.addUserToDatabase(newUser);
+            Logger.info(`User added to database: ${member.user.tag}`);
         }
 
-        // Retrieve the member role ID from the guild's config
         const memberRoleId = guildConfig.roles.memberRoleId;
-
-        // Check if the user has the "member" role (verified role) in the current guild
         const isVerified = member.roles.cache.has(memberRoleId);
 
-        // Update user verification status based on role
         if (isVerified) {
-            await updateUserStatus(member.id, member.guild.id, { 
-                verifiedStatus: true, 
-                verificationDate: new Date().toISOString() 
+            await Database.updateUserStatus(member.id, member.guild.id, {
+                verifiedStatus: true,
+                verificationDate: new Date().toISOString(),
             });
-        }
-
-        // Send verification embed to the user if not verified yet
-        if (!isVerified) {
+        } else {
             const dmChannel = await member.createDM();
             const verificationEmbed = new EmbedBuilder()
                 .setColor('#FFCC00')
@@ -71,64 +72,67 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
                 .setTimestamp();
 
             const verificationMessage = await dmChannel.send({ embeds: [verificationEmbed] });
-            Logger.info('Verification Embed Sent to DM', { user: member.user.tag, guild: member.guild.name });
-
-            // React with ✅ emoji
             await verificationMessage.react('✅');
             const filter = (reaction: any, user: any) => reaction.emoji.name === '✅' && user.id === member.id;
-
-            // Create a collector to listen for reactions
             const collector = verificationMessage.createReactionCollector({ filter, time: 15 * 60 * 1000 });
 
-            let reacted = false; // Flag to check if the user has reacted
-
             collector.on('collect', async () => {
-                if (!reacted) { // Make sure to only handle the first reaction
-                    reacted = true;
-                    Logger.info('Verification Reaction Collected', { user: member.user.tag, guild: member.guild.name });
+                const verifiedRole = member.guild.roles.cache.get(guildConfig.roles.staffRoleId);
+                if (verifiedRole) {
+                    await member.roles.add(verifiedRole);
+                    await Database.updateUserStatus(member.id, member.guild.id, {
+                        verifiedStatus: true,
+                        verificationDate: new Date().toISOString(),
+                    });
 
-                    // Assign the verified role to the user
-                    const verifiedRole = member.guild.roles.cache.get(guildConfig.roles.staffRoleId);
+                    await member.send(`Thank you for verifying your account, ${member.user.tag}! You now have access to the server.`);
+                    const mainEntranceChannel = member.guild.channels.cache.get(guildConfig.channels.mainEntranceChannelId);
+                    if (mainEntranceChannel && mainEntranceChannel.isText()) {
+                        const welcomeEmbed = new EmbedBuilder()
+                            .setColor('#00FF00')
+                            .setTitle('Welcome!')
+                            .setDescription(`<@${member.id}> to ${member.guild.name}, We're excited to have you here!`)
+                            .setTimestamp();
 
-                    if (verifiedRole) {
-                        await member.roles.add(verifiedRole);
-
-                        // Update user data in the database to mark them as verified
-                        await updateUserStatus(member.id, member.guild.id, { 
-                            verifiedStatus: true, 
-                            verificationDate: new Date().toISOString() 
-                        });
-
-                        Logger.info('User Verified', { user: member.user.tag, guild: member.guild.name });
-
-                        // Send a thank-you message to the user
-                        await member.send(`Thank you for verifying your account, ${member.user.tag}! You now have access to the server.`);
-
-                        // Send welcome message to the server channel (using mainEntranceChannelId dynamically)
-                        const mainEntranceChannel = member.guild.channels.cache.get(guildConfig.channels.mainEntranceChannelId);
-
-                        if (mainEntranceChannel) {
-                            const welcomeEmbed = new EmbedBuilder()
-                                .setColor('#00FF00')
-                                .setTitle('Welcome!')
-                                .setDescription(`<@${member.id}> to ${member.guild.name}, We're excited to have you here!`)
-                                .setTimestamp();
-
-                            await mainEntranceChannel.send({ embeds: [welcomeEmbed] });
-                            Logger.info('Welcome Message Sent', { user: member.user.tag, guild: member.guild.name });
-                        }
+                        await mainEntranceChannel.send({ embeds: [welcomeEmbed] });
                     }
                 }
             });
 
             collector.on('end', (collected, reason) => {
-                if (reason === 'time' && !reacted) { // Only send the timeout message if no reaction was collected
-                    Logger.info('Verification Timed Out', { user: member.user.tag, guild: member.guild.name });
+                if (reason === 'time') {
                     member.send('Verification timed out. Please try again by reacting to the verification message.');
                 }
             });
         }
     } catch (error) {
-        Logger.error('Error Handling New Member', { user: member.user.tag, guild: member.guild.name, error: error.message });
+        Logger.error(`Error handling new member ${member.user.tag}: ${error.message}`);
+    }
+};
+
+// Function to handle member leaving the server
+export const handleMemberLeave = async (client: Client, member: GuildMember) => {
+    const guildConfig = Object.values(config.discord).find(guild => guild.guildId === member.guild.id) as GuildConfig;
+
+    if (!guildConfig) {
+        Logger.error(`Guild configuration missing for ${member.guild.name} (ID: ${member.guild.id})`);
+        return;
+    }
+
+    Logger.info(`Member left: ${member.user.tag} from ${member.guild.name}`);
+
+    try {
+        const leaveChannel = member.guild.channels.cache.get(guildConfig.channels.leaveLogChannelId);
+        if (leaveChannel && leaveChannel.isText()) {
+            const leaveEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('Goodbye!')
+                .setDescription(`${member.user.tag} has left ${member.guild.name}.`)
+                .setTimestamp();
+
+            await leaveChannel.send({ embeds: [leaveEmbed] });
+        }
+    } catch (error) {
+        Logger.error(`Error handling member leave ${member.user.tag}: ${error.message}`);
     }
 };
