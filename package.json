@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "./core/index.ts",
   "scripts": {
-    "dev": "nodemon core/index.ts",
-    "start": "ts-node-dev --respawn --transpileOnly ./core/index.ts"
+    "dev": "nodemon ./core/index.ts",
+    "start": "npx ts-node ./core/index.ts"
   },
   "repository": {
     "type": "git",

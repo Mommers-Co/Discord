@@ -1,6 +1,7 @@
 import { Sequelize, DataTypes, Model, Optional } from 'sequelize';
 import fs from 'fs';
 import Logger from './logger';
+import { TextChannel, GuildMember, Message, GuildBasedChannel } from 'discord.js';
 
 // Read the configuration file for the database
 const config = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
@@ -140,6 +141,12 @@ class Database {
                 sequelize: this.sequelize,
                 tableName: 'users',
                 timestamps: false, // You can add `createdAt` and `updatedAt` if needed
+                indexes: [
+                    {
+                        unique: true,
+                        fields: ['discordUserId', 'guildId'],
+                    },
+                ]
             }
         );
 
@@ -167,14 +174,17 @@ class Database {
     // Connect to the appropriate database based on config
     async connect() {
         try {
-            if (config.database.type === 'postgres' || config.database.type === 'mysql') {
-                await this.sequelize.authenticate();
-                await this.User.sync();
-                await this.GuildSettings.sync(); // Synchronize the GuildSettings model
-                Logger.info('Connected to database and synchronized User and GuildSettings tables.');
+            await this.sequelize.authenticate();
+            Logger.info('Database connection established.');
+            // `force: false` in production
+            if (config.environment === 'development') {
+                await this.sequelize.sync({ force: false });
+            } else {
+                await this.sequelize.sync();
             }
+            Logger.info('Database models synchronized.');
         } catch (error) {
-            Logger.error(`Database connection error: ${error}`);
+            Logger.error(`Database error: ${error}`);
         }
     }
 
@@ -188,19 +198,34 @@ class Database {
         return await this.User.create(newUser);
     }
 
-    // Check if a user exists by Discord ID and Guild ID, and add them if not
-    async ensureUserExists(discordUserId: string, guildId: string, member: any) {
+    async ensureUserExists(discordUserId: string, guildId: string, member: GuildMember) {
         const existingUser = await this.getUserByDiscordIdAndGuildId(discordUserId, guildId);
         if (!existingUser) {
-            const newUser: UserAttributes = {
+            // Find a valid TextChannel
+            const channel = member.guild.channels.cache.find(ch => ch instanceof TextChannel && ch.viewable);
+    
+            // Declare lastMessage properly
+            let lastMessage: Message | null = null;
+    
+            if (channel && channel instanceof TextChannel) {
+                // Fetch all messages from the channel
+                const messages = await channel.messages.fetch({ limit: 100 });
+    
+                // Filter messages to find the one sent by the specific user
+                lastMessage = messages.filter(msg => msg.author.id === member.id).first() ?? null;
+            }
+    
+            const userData: UserAttributes = {
                 discordUserId: member.id,
                 guildId,
                 username: member.user.username,
                 JoinedAt: member.joinedAt?.toISOString() ?? '',
                 verifiedStatus: false,
                 verificationDate: null,
-                lastActive: member.user.lastMessage?.createdAt?.toISOString() ?? member.joinedAt?.toISOString() ?? new Date().toISOString(),
-                roles: member.roles.cache.map((role: any) => role.name),
+                lastActive: lastMessage
+                    ? new Date(lastMessage.createdAt).toISOString()
+                    : member.joinedAt?.toISOString() ?? new Date().toISOString(),
+                roles: member.roles.cache.map((role) => role.name),
                 warnings: 0,
                 bans: 0,
                 lastAction: null,
@@ -208,9 +233,9 @@ class Database {
                 ticketIds: [],
                 discordCreation: member.user.createdAt.toISOString(),
             };
-
-            await this.addUserToDatabase(newUser);
-            Logger.info(`Added user ${member.user.tag} to the database for guild ${guildId}.`);
+    
+            await User.upsert(userData);
+            Logger.info(`User ${member.user.tag} has been added or updated in the database for guild ${guildId}.`);
         }
     }
 
