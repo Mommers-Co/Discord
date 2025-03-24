@@ -1,4 +1,4 @@
-import { Client, GuildMember, EmbedBuilder } from 'discord.js';
+import { Client, GuildMember, EmbedBuilder, TextChannel } from 'discord.js';
 import Logger from './logger';
 import * as fs from 'fs';
 import Database from './database';
@@ -87,7 +87,7 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
 
                     await member.send(`Thank you for verifying your account, ${member.user.tag}! You now have access to the server.`);
                     const mainEntranceChannel = member.guild.channels.cache.get(guildConfig.channels.mainEntranceChannelId);
-                    if (mainEntranceChannel && mainEntranceChannel.isText()) {
+                    if (mainEntranceChannel && mainEntranceChannel instanceof TextChannel) {
                         const welcomeEmbed = new EmbedBuilder()
                             .setColor('#00FF00')
                             .setTitle('Welcome!')
@@ -106,7 +106,7 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
             });
         }
     } catch (error) {
-        Logger.error(`Error handling new member ${member.user.tag}: ${error.message}`);
+        Logger.error(`Error handling new member ${member.user.tag}: ${error instanceof Error ? error.message : error}`);
     }
 };
 
@@ -123,7 +123,7 @@ export const handleMemberLeave = async (client: Client, member: GuildMember) => 
 
     try {
         const leaveChannel = member.guild.channels.cache.get(guildConfig.channels.leaveLogChannelId);
-        if (leaveChannel && leaveChannel.isText()) {
+        if (leaveChannel && leaveChannel instanceof TextChannel) {
             const leaveEmbed = new EmbedBuilder()
                 .setColor('#FF0000')
                 .setTitle('Goodbye!')
@@ -133,6 +133,6 @@ export const handleMemberLeave = async (client: Client, member: GuildMember) => 
             await leaveChannel.send({ embeds: [leaveEmbed] });
         }
     } catch (error) {
-        Logger.error(`Error handling member leave ${member.user.tag}: ${error.message}`);
+        Logger.error(`Error handling member leave ${member.user.tag}: ${error instanceof Error ? error.message : error}`);
     }
 };
