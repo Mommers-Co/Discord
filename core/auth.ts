@@ -1,12 +1,13 @@
 import { Client, GuildMember, EmbedBuilder } from 'discord.js';
 import Logger from './logger';
 import { getUserByDiscordId, addUserToDatabase, updateUserStatus } from './database';
+import config from '../config.json'; // Import config file
 
-// Assuming that client.guildSettings is already populated in the client instance
+// Function to handle new member joining the server
 export const handleNewMemberJoin = async (client: Client, member: GuildMember) => {
-    // Retrieve guild config from the client.cache
-    const guildConfig = client.guildSettings.get(member.guild.id);
-    
+    // Dynamically get the guild configuration from config.json using the guild ID
+    const guildConfig = Object.values(config.discord).find(guild => guild.guildId === member.guild.id);
+
     // Check if the configuration for the guild exists
     if (!guildConfig) {
         Logger.error('Guild Configuration Missing', { guildId: member.guild.id });
@@ -43,7 +44,7 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
         }
 
         // Retrieve the member role ID from the guild's config
-        const memberRoleId = guildConfig.settings.memberRoleId;
+        const memberRoleId = guildConfig.roles.memberRoleId;
 
         // Check if the user has the "member" role (verified role) in the current guild
         const isVerified = member.roles.cache.has(memberRoleId);
@@ -84,7 +85,7 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
                     Logger.info('Verification Reaction Collected', { user: member.user.tag, guild: member.guild.name });
 
                     // Assign the verified role to the user
-                    const verifiedRole = member.guild.roles.cache.get(guildConfig.settings.verifiedRoleId);
+                    const verifiedRole = member.guild.roles.cache.get(guildConfig.roles.staffRoleId);
 
                     if (verifiedRole) {
                         await member.roles.add(verifiedRole);
@@ -100,17 +101,17 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
                         // Send a thank-you message to the user
                         await member.send(`Thank you for verifying your account, ${member.user.tag}! You now have access to the server.`);
 
-                        // Send welcome message to the server channel
-                        const welcomeEmbed = new EmbedBuilder()
-                            .setColor('#00FF00')
-                            .setTitle('Welcome!')
-                            .setDescription(`<@${member.id}> to ${member.guild.name}, We're excited to have you here!`)
-                            .setTimestamp();
+                        // Send welcome message to the server channel (using mainEntranceChannelId dynamically)
+                        const mainEntranceChannel = member.guild.channels.cache.get(guildConfig.channels.mainEntranceChannelId);
 
-                        const welcomeChannel = member.guild.channels.cache.get(guildConfig.settings.welcomeChannelId); // Use the guild-specific welcome channel
+                        if (mainEntranceChannel) {
+                            const welcomeEmbed = new EmbedBuilder()
+                                .setColor('#00FF00')
+                                .setTitle('Welcome!')
+                                .setDescription(`<@${member.id}> to ${member.guild.name}, We're excited to have you here!`)
+                                .setTimestamp();
 
-                        if (welcomeChannel) {
-                            await welcomeChannel.send({ embeds: [welcomeEmbed] });
+                            await mainEntranceChannel.send({ embeds: [welcomeEmbed] });
                             Logger.info('Welcome Message Sent', { user: member.user.tag, guild: member.guild.name });
                         }
                     }
