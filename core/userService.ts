@@ -15,20 +15,20 @@ class UserService {
                     // Check if the user is part of this guild
                     if (guild.members.cache.has(member.id)) {
                         // Check if the user already exists in the database for this guild
-                        const user = await Database.getUserByDiscordId(member.id, guild.id);
+                        const user = await Database.getUserByDiscordIdAndGuildId(member.id, guild.id);
 
                         if (user) {
                             // If the user is already in the database, log it
-                            Logger.info(`User ${member.user.tag} already exists in database for guild ${guild.name}.`);
+                            Logger.database(`User ${member.user.tag} already exists in database for guild ${guild.name}.`);
                         } else {
                             // If the user doesn't exist, add them to the database
                             await Database.ensureUserExists(member.id, guild.id, member);
                             userAdded = true;
-                            Logger.info(`User ${member.user.tag} added to the database for guild ${guild.name}.`);
+                            Logger.database(`User ${member.user.tag} added to the database for guild ${guild.name}.`);
                         }
                     } else {
                         // If the user is not in the guild, log that they're skipped for this guild
-                        Logger.info(`User ${member.user.tag} is not a member of guild ${guild.name}, skipping database check.`);
+                        Logger.database(`User ${member.user.tag} is not a member of guild ${guild.name}, skipping database check.`);
                     }
                 })
             );

@@ -23,7 +23,8 @@
     "pg": "^8.14.1",
     "pg-hstore": "^2.3.4",
     "rss-parser": "^3.13.0",
-    "sequelize": "^6.37.6"
+    "sequelize": "^6.37.6",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.11",

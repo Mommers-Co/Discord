@@ -71,7 +71,7 @@ class Database {
             {
                 host: config.database.host,
                 dialect: config.database.type,
-                logging: (msg) => Logger.info(msg),
+                logging: (msg) => Logger.database(msg),  // Update to use Logger.database
             }
         );
 
@@ -280,6 +280,5 @@ class Database {
         });
     }
 }
-
 
 export default new Database();

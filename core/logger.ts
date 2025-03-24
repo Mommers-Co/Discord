@@ -1,12 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 
-//config file path
+// Config file path
 const configPath = path.resolve(__dirname, '../config.json');
-const config = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
+const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
-// Define log file path
+// Define log file paths
 const logFilePath = path.join(__dirname, "../logs/bot.log");
+const dbLogFilePath = path.join(__dirname, "../logs/database.log");
 
 // Ensure logs directory exists
 if (!fs.existsSync(path.dirname(logFilePath))) {
@@ -15,7 +16,7 @@ if (!fs.existsSync(path.dirname(logFilePath))) {
 
 class Logger {
     // Log level from config
-    static logLevel: string = config.logging.level || 'debug';  // Default to 'debug' if not set in config
+    static logLevel: string = config.logging.level || 'debug'; // Default to 'debug' if not set in config
 
     // Helper method to compare the log level
     private static shouldLog(level: string): boolean {
@@ -29,14 +30,13 @@ class Logger {
         return levels[level] >= levels[Logger.logLevel];
     }
 
-    // Static log method
-    static log(level: "INFO" | "WARN" | "ERROR", message: string) {
+    // Static log method for general logging
+    static log(level: "INFO" | "WARN" | "ERROR", message: string, isDatabaseLog: boolean = false) {
         const timestamp = new Date().toISOString();
         const logMessage = `[${timestamp}] [${level}] ${message}\n`;
 
-        // Only log based on the configured level
+        // Log to console based on log level
         if (Logger.shouldLog(level.toLowerCase())) {
-            // Print to console
             if (level === 'INFO' && Logger.logLevel !== 'error') {
                 console.log(logMessage.trim());
             } else if (level === 'WARN' && (Logger.logLevel === 'debug' || Logger.logLevel === 'info')) {
@@ -44,10 +44,21 @@ class Logger {
             } else if (level === 'ERROR') {
                 console.error(logMessage.trim());
             }
+        }
 
-            // Write to file
+        // Write to appropriate file
+        if (isDatabaseLog) {
+            // Log to database.log
+            fs.appendFileSync(dbLogFilePath, logMessage);
+        } else {
+            // Log to bot.log
             fs.appendFileSync(logFilePath, logMessage);
         }
+    }
+
+    // Helper method for logging database-specific events
+    static database(message: string) {
+        this.log("INFO", message, true); // Pass true to log to database.log
     }
 
     // Static helper methods for different log levels
