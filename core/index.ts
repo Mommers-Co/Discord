@@ -1,5 +1,5 @@
 import CustomClient from './customClient';
-import { GatewayIntentBits, ActivityType, Collection, Client, GuildMember, PartialGuildMember } from 'discord.js';
+import { GatewayIntentBits, ActivityType, Collection, Client, GuildMember, PartialGuildMember, Partials } from 'discord.js';
 import fs from 'fs';
 import Logger from './logger';
 import Database from './database';
@@ -12,7 +12,8 @@ const config = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
 
 // Instance of the Discord client
 const client = new CustomClient({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers],
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
 // Add a guildSettings cache to the client (this should work now, since we extended CustomClient)
@@ -24,51 +25,64 @@ client.once('ready', async () => {
 
     try {
         // Connect to the database
+        Logger.info('Attempting to connect to the database...');
         await Database.connect();
+        Logger.info('Database connection established.');
 
         // Load guild settings from config.json and set them in the cache
+        Logger.info('Loading guild settings from config...');
         for (const guildId in config.discord) {
             const guildConfig = config.discord[guildId];
 
             // Only add guilds that have settings defined in config.json
             if (guildConfig.guildId) {
                 client.guildSettings.set(guildId, guildConfig);
+                Logger.info(`Guild settings loaded into cache for guild ID: ${guildId}`);
+            } else {
+                Logger.warn(`Guild config for key "${guildId}" is missing a guildId.`);
             }
         }
 
-        Logger.info(`Loaded settings for ${client.guildSettings.size} guild(s).`);
+        Logger.info(`Successfully loaded settings for ${client.guildSettings.size} guild(s).`);
 
         // Log the loaded guild settings for debugging
         client.guildSettings.forEach((guildConfig, guildId) => {
-            Logger.info(`Loaded config for guild: ${guildId}`);
-            Logger.info(`Guild settings: ${JSON.stringify(guildConfig, null, 2)}`);
+            Logger.info(`Config for guild ${guildId}: ${JSON.stringify(guildConfig, null, 2)}`);
         });
 
         // Fetch all guilds and their members, and ensure users are added to the database
-        const guildsFetched = await client.guilds.fetch(); // Returns Collection<string, OAuth2Guild>
+        Logger.info('Fetching all connected guilds...');
+        const guildsFetched = await client.guilds.fetch();
 
-        // Explicitly handle OAuth2Guilds and fetch the full Guild object
+        Logger.info(`Fetched ${guildsFetched.size} guild(s) from Discord.`);
+
         for (const oauthGuild of guildsFetched.values()) {
             try {
-                // Fetch the full Guild object using the OAuth2Guild ID
+                Logger.info(`Fetching full guild object for: ${oauthGuild.name} (${oauthGuild.id})`);
                 const guild = await client.guilds.fetch(oauthGuild.id);
 
-                // Fetch guild members
+                Logger.info(`Fetching members for guild: ${guild.name}`);
                 const members = await guild.members.fetch();
+                Logger.info(`Fetched ${members.size} members for guild: ${guild.name}`);
+
                 for (const member of members.values()) {
                     try {
-                        await UserService.ensureUserExists(client, member);  // Pass client and member
+                        Logger.info(`Ensuring user exists in DB: ${member.user.tag} (${member.id})`);
+                        await UserService.ensureUserExists(client, member);
+                        Logger.info(`User confirmed/added: ${member.user.tag} (${member.id})`);
                     } catch (error) {
                         Logger.error(`Error ensuring user ${member.id} exists in DB : ${error}`);
                     }
-                };
+                }
             } catch (error) {
                 Logger.error(`Error fetching full guild for ${oauthGuild.name} (${oauthGuild.id}): ${error}`);
             }
         }
 
         // Update presence for each guild dynamically
+        Logger.info('Updating bot presence...');
         updatePresence(client);
+        Logger.info('Presence update complete.');
 
     } catch (error: unknown) {
         if (error instanceof Error) {
