@@ -1,7 +1,7 @@
 @echo off
 :loop
 echo Starting the bot...
-node --trace-warnings client/client.js
+node npm run start
 echo Bot crashed with exit code %ERRORLEVEL%.
 echo Restarting bot...
 timeout /t 5
