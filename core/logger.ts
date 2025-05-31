@@ -30,9 +30,23 @@ class Logger {
         return levels[level] >= levels[Logger.logLevel];
     }
 
+    // Format current date/time as DD/MM/YYYY | HH:mm:ss (local time)
+    private static getFormattedTimestamp(): string {
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0'); // Months are zero-indexed
+        const year = now.getFullYear();
+
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+
+        return `${day}/${month}/${year} | ${hours}:${minutes}:${seconds}`;
+    }
+
     // Static log method for general logging
     static log(level: "INFO" | "WARN" | "ERROR", message: string, isDatabaseLog: boolean = false) {
-        const timestamp = new Date().toISOString();
+        const timestamp = Logger.getFormattedTimestamp();
         const logMessage = `[${timestamp}] [${level}] ${message}\n`;
 
         // Log to console based on log level

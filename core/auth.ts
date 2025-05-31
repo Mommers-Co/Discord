@@ -1,13 +1,37 @@
-import { Client, GuildMember, Guild, EmbedBuilder, TextChannel, MessageReaction, User, ReactionCollector } from 'discord.js';
+import { Client, GuildMember, EmbedBuilder, TextChannel, ButtonBuilder, ButtonStyle, ActionRowBuilder, InteractionCollector, ButtonInteraction, ComponentType  } from 'discord.js';
 import Logger from './logger';
 import * as fs from 'fs';
 import Database from './database';
 
-const config = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
+interface GuildRoles {
+    memberRoleId: string;
+}
+
+interface GuildChannels {
+    mainEntranceChannelId: string;
+    leaveLogChannelId: string;
+}
+
+interface GuildConfig {
+    guildId: string;
+    roles: GuildRoles;
+    channels: GuildChannels;
+}
+
+interface DiscordConfig {
+    [key: string]: GuildConfig;
+}
+
+interface AppConfig {
+    discord: DiscordConfig;
+}
+
+const config: AppConfig = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
 
 export const handleNewMemberJoin = async (client: Client, member: GuildMember) => {
     const guildConfig = Object.values(config.discord).find(
-        (guild: { guildId: string }) => guild.guildId === member.guild.id);
+        (guild) => guild.guildId === member.guild.id
+    );
 
     if (!guildConfig) {
         Logger.error(`Guild config missing for ${member.guild.name} (${member.guild.id})`);
@@ -18,7 +42,6 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
 
     try {
         const userInDb = await Database.getUserByDiscordIdAndGuildId(member.id, member.guild.id);
-
         if (!userInDb) {
             await Database.addUserToDatabase({
                 discordUserId: member.id,
@@ -34,100 +57,146 @@ export const handleNewMemberJoin = async (client: Client, member: GuildMember) =
                 bans: 0,
                 lastAction: null,
                 notes: '',
-                ticketIds: []
+                ticketIds: [],
             });
 
             Logger.info(`User ${member.user.tag} added to database`);
         }
 
-        const isAlreadyVerified = member.roles.cache.has(guildConfig.roles.memberRoleId);
-
-        if (isAlreadyVerified) {
+        const isVerified = member.roles.cache.has(guildConfig.roles.memberRoleId);
+        if (isVerified) {
             await Database.updateUserStatus(member.id, member.guild.id, {
                 verifiedStatus: true,
-                verificationDate: new Date().toISOString()
+                verificationDate: new Date().toISOString(),
             });
+            Logger.info(`${member.user.tag} already verified`);
             return;
         }
 
-        // Start verification via DM
-        let dmChannel;
-        try {
-            dmChannel = await member.createDM();
-        } catch (err) {
-            Logger.warn(`Couldn't DM ${member.user.tag}: ${err}`);
-            return;
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor('#FFCC00')
-            .setTitle('Verification Required')
-            .setDescription(`Hi ${member.user.tag}! React with ✅ to verify and get access.`)
-            .setThumbnail(member.user.displayAvatarURL())
-            .setTimestamp();
-
-        const msg = await dmChannel.send({ embeds: [embed] });
-        await msg.react('✅');
-
-        const filter = (reaction: MessageReaction, user: User) =>
-            reaction.emoji.name === '✅' && user.id === member.id;
-
-        const collector = msg.createReactionCollector({ filter, time: 15 * 60 * 1000 });
-
-        Logger.info(`Started reaction collector for ${member.user.tag}`);
-
-        collector.on('collect', async (reaction, user) => {
+        // Verification attempt function with button support
+        const attemptVerification = async () => {
+            let dmChannel;
             try {
-                if (reaction.partial) await reaction.fetch();
-                if (user.partial) await user.fetch();
-
-                const verifiedRole = member.guild.roles.cache.get(guildConfig.roles.memberRoleId);
-                if (!verifiedRole) {
-                    Logger.warn(`Verified role not found in ${member.guild.name}`);
-                    return;
-                }
-
-                await member.roles.add(verifiedRole);
-                Logger.info(`Verified role assigned to ${member.user.tag}`);
-
-                await Database.updateUserStatus(member.id, member.guild.id, {
-                    verifiedStatus: true,
-                    verificationDate: new Date().toISOString()
-                });
-
-                await member.send(`✅ Thanks ${member.user.tag}, you are now verified!`);
-
-                const entranceChannel = member.guild.channels.cache.get(guildConfig.channels.mainEntranceChannelId);
-                if (entranceChannel instanceof TextChannel) {
-                    const welcomeEmbed = new EmbedBuilder()
-                        .setColor('#00FF00')
-                        .setTitle('Welcome!')
-                        .setDescription(`<@${member.id}> to ${member.guild.name}!`)
-                        .setTimestamp();
-
-                    await entranceChannel.send({ embeds: [welcomeEmbed] });
-                } else {
-                    Logger.warn(`Entrance channel invalid or not found.`);
-                }
-
-                collector.stop('verified');
-
+                dmChannel = await member.createDM();
             } catch (err) {
-                Logger.error(`Error verifying ${member.user.tag}: ${err}`);
+                Logger.warn(`Could not DM ${member.user.tag}: ${err}`);
+                return;
             }
-        });
 
-        collector.on('end', (_, reason) => {
-            if (reason === 'time') {
-                member.send('⏰ Verification timed out. Please try again later.');
-                Logger.warn(`Verification timed out for ${member.user.tag}`);
-            } else {
-                Logger.info(`Verification collector ended for ${member.user.tag} (reason: ${reason})`);
-            }
-        });
+            const verifyEmbed = new EmbedBuilder()
+                .setColor('#FFCC00')
+                .setTitle('Verification Required')
+                .setDescription(`Hi ${member.user.tag}! Click the button below to verify.`)
+                .setThumbnail(member.user.displayAvatarURL())
+                .setTimestamp();
 
+            const verifyButton = new ButtonBuilder()
+                .setCustomId('verify_button')
+                .setLabel('✅ Verify Me')
+                .setStyle(ButtonStyle.Success);
+
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(verifyButton);
+
+            const dmMessage = await dmChannel.send({ embeds: [verifyEmbed], components: [row] });
+
+            const collector = dmMessage.createMessageComponentCollector({
+                componentType: ComponentType.Button,
+                time: 15 * 60 * 1000, // 15 minutes
+            }) as InteractionCollector<ButtonInteraction>;
+
+            Logger.info(`Started verification collector for ${member.user.tag}`);
+
+            collector.on('collect', async (interaction) => {
+                if (interaction.customId === 'verify_button' && interaction.user.id === member.id) {
+                    try {
+                        const verifiedRole = member.guild.roles.cache.get(guildConfig.roles.memberRoleId);
+                        if (!verifiedRole) {
+                            Logger.warn(`Verified role not found in ${member.guild.name}`);
+                            await interaction.reply({ content: `Verification role is missing.`, ephemeral: true });
+                            return;
+                        }
+
+                        await member.roles.add(verifiedRole);
+                        Logger.info(`Verified role assigned to ${member.user.tag}`);
+
+                        await Database.updateUserStatus(member.id, member.guild.id, {
+                            verifiedStatus: true,
+                            verificationDate: new Date().toISOString(),
+                        });
+
+                        await interaction.update({
+                            content: `✅ You're verified! Welcome to **${member.guild.name}**.`,
+                            embeds: [],
+                            components: [],
+                        });
+
+                        const entranceChannel = member.guild.channels.cache.get(
+                            guildConfig.channels.mainEntranceChannelId
+                        );
+                        if (entranceChannel instanceof TextChannel) {
+                            const welcomeEmbed = new EmbedBuilder()
+                                .setColor('#00FF00')
+                                .setTitle('Welcome!')
+                                .setDescription(`<@${member.id}> to ${member.guild.name}!`)
+                                .setTimestamp();
+
+                            await entranceChannel.send({ embeds: [welcomeEmbed] });
+                        }
+
+                        collector.stop('verified');
+                    } catch (err) {
+                        Logger.error(`Error verifying ${member.user.tag}: ${err}`);
+                    }
+                }
+            });
+
+            collector.on('end', async (_collected, reason) => {
+                if (reason !== 'verified') {
+                    try {
+                        const retryEmbed = new EmbedBuilder()
+                            .setColor('#FFA500')
+                            .setTitle('Verification Timeout')
+                            .setDescription('⏰ Verification timed out. Click the button below to retry.')
+                            .setTimestamp();
+
+                        const retryButton = new ButtonBuilder()
+                            .setCustomId('retry_verification')
+                            .setLabel('🔄 Retry Verification')
+                            .setStyle(ButtonStyle.Primary);
+
+                        const retryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(retryButton);
+
+                        const retryMsg = await dmChannel.send({ embeds: [retryEmbed], components: [retryRow] });
+
+                        const retryCollector = retryMsg.createMessageComponentCollector({
+                            componentType: ComponentType.Button,
+                            time: 30 * 60 * 1000, // Allow retry for 30 minutes
+                        });
+
+                        retryCollector.on('collect', async (interaction) => {
+                            if (interaction.customId === 'retry_verification' && interaction.user.id === member.id) {
+                                await interaction.deferUpdate();
+                                retryCollector.stop();
+                                await attemptVerification(); // Retry
+                            }
+                        });
+
+                        retryCollector.on('end', () => {
+                            Logger.warn(`Retry collector ended for ${member.user.tag}`);
+                        });
+                    } catch (err) {
+                        Logger.error(`Error sending retry prompt: ${err}`);
+                    }
+                    Logger.warn(`Verification timed out for ${member.user.tag}`);
+                } else {
+                    Logger.info(`Verification collector ended for ${member.user.tag} (reason: ${reason})`);
+                }
+            });
+        };
+
+        await attemptVerification();
     } catch (error) {
-        Logger.error(`Error in handleNewMemberJoin: ${error instanceof Error ? error.message : error}`);
+        Logger.error(`handleNewMemberJoin error: ${error instanceof Error ? error.message : error}`);
     }
 };
 
@@ -144,17 +213,19 @@ export const handleMemberLeave = async (client: Client, member: GuildMember) => 
     Logger.info(`${member.user.tag} left ${member.guild.name}`);
 
     try {
-        const channel = member.guild.channels.cache.get(guildConfig.channels.leaveLogChannelId);
+        const channel = member.guild.channels.cache.get(guildConfig.channels.mainEntranceChannelId);
         if (channel instanceof TextChannel) {
-            const embed = new EmbedBuilder()
+            const leaveEmbed = new EmbedBuilder()
                 .setColor('#FF0000')
                 .setTitle('Goodbye!')
                 .setDescription(`${member.user.tag} has left ${member.guild.name}.`)
                 .setTimestamp();
 
-            await channel.send({ embeds: [embed] });
+            await channel.send({ embeds: [leaveEmbed] });
+        } else {
+            Logger.warn(`Leave log channel invalid or not found.`);
         }
     } catch (error) {
-        Logger.error(`Error in handleMemberLeave: ${error instanceof Error ? error.message : error}`);
+        Logger.error(`handleMemberLeave error: ${error instanceof Error ? error.message : error}`);
     }
 };
