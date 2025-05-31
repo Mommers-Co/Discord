@@ -28,11 +28,10 @@ client.guildSettings = new Collection<string, GuildSettings>();
 // On client ready
 client.once('ready', async () => {
     Logger.setClient(client);
-    console.log('Loaded Discord config guild IDs:', Object.keys(config.discord.guilds));
-    Logger.info(`Known guild IDs in config: ${Object.keys(config.discord.guilds).join(', ')}`);
+    Logger.debug(`Loaded Discord config guild IDs: ${Object.keys(config.discord.guilds).join(', ')}`);
+    Logger.debug(`Known guild IDs in config: ${Object.keys(config.discord.guilds).join(', ')}`);
 
     Logger.setGuildLogChannels(client.guildSettings);
-
     Logger.info(`Logged in as ${client.user?.tag}`);
 
     try {
@@ -54,7 +53,7 @@ client.once('ready', async () => {
         Logger.info(`Loaded settings for ${client.guildSettings.size} guild(s).`);
 
         client.guildSettings.forEach((cfg, id) => {
-            Logger.info(`Guild ${id} config: ${JSON.stringify(cfg, null, 2)}`);
+            Logger.debug(`Guild ${id} config: ${JSON.stringify(cfg, null, 2)}`);
         });
 
         Logger.info('Fetching connected guilds...');
@@ -69,7 +68,7 @@ client.once('ready', async () => {
                 for (const member of members.values()) {
                     try {
                         await UserService.ensureUserExists(client, member);
-                        Logger.info(`Synced user: ${member.user.tag}`);
+                        Logger.debug(`Synced user: ${member.user.tag}`);
                     } catch (userErr) {
                         Logger.error(`User DB sync failed for ${member.user.tag}: ${userErr}`);
                     }
@@ -134,8 +133,6 @@ client.on('guildMemberAdd', async (member: GuildMember | PartialGuildMember) => 
 // Member leave handler
 client.on('guildMemberRemove', async (member: GuildMember | PartialGuildMember) => {
     try {
-        // Fetch full member for leave handler (since it expects GuildMember)
-        // If member.guild is undefined (rare edge case), handle gracefully
         if ('guild' in member && member.guild) {
             const fullMember = member instanceof GuildMember ? member : await member.guild.members.fetch(member.id);
             await handleMemberLeave(client, fullMember);

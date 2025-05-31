@@ -35,9 +35,9 @@ class UserService {
 
             // Log the result of whether the user was added to the database
             if (userAdded) {
-                Logger.info(`User ${member.user.tag} was successfully processed and added to the database where applicable.`);
+                Logger.data(`User ${member.user.tag} was successfully processed and added to the database where applicable.`);
             } else {
-                Logger.info(`No new user entries for ${member.user.tag}; already in the database for all relevant guilds.`);
+                Logger.data(`No new user entries for ${member.user.tag}; already in the database for all relevant guilds.`);
             }
 
         } catch (error: unknown) {

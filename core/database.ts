@@ -3,7 +3,6 @@ import fs from 'fs';
 import Logger from './logger';
 import { GuildMember, TextChannel, Message } from 'discord.js';
 
-// Load database config
 const config = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
 
 // Interfaces
@@ -32,7 +31,6 @@ interface GuildSettingsAttributes {
 interface UserCreationAttributes extends Optional<UserAttributes, 'discordUserId'> {}
 interface GuildSettingsCreationAttributes extends Optional<GuildSettingsAttributes, 'id'> {}
 
-// Sequelize Models
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
     public discordUserId!: string;
     public guildId!: string;
@@ -68,9 +66,10 @@ class Database {
             {
                 host: config.database.host,
                 dialect: config.database.type as any,
-                logging: (msg) => Logger.database(msg),
+                logging: (sql, timing) => Logger.database(`${sql}${timing ? ` (${timing} ms)` : ''}`),
             }
         );
+
 
         this.User = User.init(
             {
@@ -172,19 +171,6 @@ class Database {
         );
     }
 
-    public async ensureGuildExists(guildId: string) {
-        try {
-            const existingGuild = await this.GuildSettings.findOne({ where: { id: guildId } });
-            if (!existingGuild) {
-                Logger.warn(`[DB] Guild config missing for ID: ${guildId}. Creating default config.`);
-                await this.addGuild(guildId);
-                Logger.info(`[DB] Guild config created for ID: ${guildId}`);
-            }
-        } catch (error) {
-            Logger.error(`[DB] Failed to ensure guild exists (${guildId}): ${error}`);
-        }
-    }
-
     public async connect() {
         try {
             await this.sequelize.authenticate();
@@ -193,6 +179,19 @@ class Database {
             Logger.info('Tables synchronized successfully');
         } catch (error) {
             Logger.error(`Database connection error: ${error}`);
+        }
+    }
+
+    public async ensureGuildExists(guildId: string) {
+        try {
+            const existingGuild = await this.GuildSettings.findOne({ where: { id: guildId } });
+            if (!existingGuild) {
+                Logger.data(`[DB] Guild config missing for ID: ${guildId}. Creating default config.`);
+                await this.addGuild(guildId);
+                Logger.data(`[DB] Guild config created for ID: ${guildId}`);
+            }
+        } catch (error) {
+            Logger.error(`[DB] Failed to ensure guild exists (${guildId}): ${error}`);
         }
     }
 
@@ -211,14 +210,14 @@ class Database {
             const existingUser = await this.getUserByDiscordIdAndGuildId(user.discordUserId, user.guildId);
             if (!existingUser) {
                 const newUser = await this.User.create(user);
-                Logger.info(`[DB] Added user ${user.discordUserId} to guild ${user.guildId}`);
+                Logger.data(`[DB] Added user ${user.discordUserId} to guild ${user.guildId}`);
                 return newUser;
             } else {
-                Logger.info(`User ${user.discordUserId} already exists in guild ${user.guildId}`);
+                Logger.data(`[DB] User ${user.discordUserId} already exists in guild ${user.guildId}`);
                 return existingUser;
             }
         } catch (error) {
-            Logger.error(`Error adding user: ${error}`);
+            Logger.error(`[DB] Error adding user: ${error}`);
             throw error;
         }
     }
@@ -227,7 +226,6 @@ class Database {
         const existingUser = await this.getUserByDiscordIdAndGuildId(discordUserId, guildId);
         if (existingUser) return;
 
-        // Find a viewable text channel to check last message
         const channel = member.guild.channels.cache.find(
             ch => ch instanceof TextChannel && ch.viewable
         ) as TextChannel | undefined;
@@ -268,10 +266,10 @@ class Database {
             const result = await this.User.update(newStatus, {
                 where: { discordUserId, guildId },
             });
-            Logger.info(`[DB] Updated user status for ${discordUserId} in guild ${guildId}`);
+            Logger.data(`[DB] Updated user status for ${discordUserId} in guild ${guildId}`);
             return result;
         } catch (error) {
-            Logger.error(`Failed to update user status: ${error}`);
+            Logger.error(`[DB] Failed to update user status: ${error}`);
             throw error;
         }
     }
@@ -286,7 +284,7 @@ class Database {
                 id: guildId,
                 settings: {},
             });
-            Logger.info(`[DB] Guild config created for ID: ${guildId}`);
+            Logger.data(`[DB] Guild config created for ID: ${guildId}`);
             return newGuild;
         } catch (error) {
             Logger.error(`[DB] Failed to create guild config for ID: ${guildId}: ${error}`);
@@ -299,7 +297,7 @@ class Database {
             const deletedCount = await this.GuildSettings.destroy({
                 where: { id: guildId },
             });
-            Logger.info(`[DB] Removed guild config for ID: ${guildId}`);
+            Logger.data(`[DB] Removed guild config for ID: ${guildId}`);
             return deletedCount;
         } catch (error) {
             Logger.error(`[DB] Failed to remove guild config for ID: ${guildId}: ${error}`);
