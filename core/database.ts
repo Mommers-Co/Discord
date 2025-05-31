@@ -3,10 +3,10 @@ import fs from 'fs';
 import Logger from './logger';
 import { GuildMember, TextChannel, Message } from 'discord.js';
 
-// Read the configuration file for the database
+// Load database config
 const config = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
 
-// Define the interface for the User attributes
+// Interfaces
 interface UserAttributes {
     discordUserId: string;
     guildId: string;
@@ -24,18 +24,15 @@ interface UserAttributes {
     ticketIds: string[];
 }
 
-// Define the interface for the Guild settings
 interface GuildSettingsAttributes {
     id: string;
     settings: object;
 }
 
-// Define the interface for the User creation attributes (what you can create with 'create' or 'upsert')
 interface UserCreationAttributes extends Optional<UserAttributes, 'discordUserId'> {}
-
-// Define the interface for Guild creation attributes
 interface GuildSettingsCreationAttributes extends Optional<GuildSettingsAttributes, 'id'> {}
 
+// Sequelize Models
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
     public discordUserId!: string;
     public guildId!: string;
@@ -70,12 +67,11 @@ class Database {
             config.database.password,
             {
                 host: config.database.host,
-                dialect: config.database.type,
-                logging: (msg) => Logger.database(msg),  // Update to use Logger.database
+                dialect: config.database.type as any,
+                logging: (msg) => Logger.database(msg),
             }
         );
 
-        // Define the User model
         this.User = User.init(
             {
                 discordUserId: {
@@ -100,6 +96,7 @@ class Database {
                 },
                 verifiedStatus: {
                     type: DataTypes.BOOLEAN,
+                    allowNull: false,
                     defaultValue: false,
                 },
                 verificationDate: {
@@ -111,16 +108,18 @@ class Database {
                     allowNull: false,
                 },
                 roles: {
-                    type: DataTypes.JSONB, // Storing roles as JSON array
+                    type: DataTypes.JSONB || DataTypes.JSON,
                     allowNull: false,
                     defaultValue: [],
                 },
                 warnings: {
                     type: DataTypes.INTEGER,
+                    allowNull: false,
                     defaultValue: 0,
                 },
                 bans: {
                     type: DataTypes.INTEGER,
+                    allowNull: false,
                     defaultValue: 0,
                 },
                 lastAction: {
@@ -129,10 +128,12 @@ class Database {
                 },
                 notes: {
                     type: DataTypes.STRING,
+                    allowNull: false,
                     defaultValue: '',
                 },
                 ticketIds: {
-                    type: DataTypes.JSONB,
+                    type: DataTypes.JSONB || DataTypes.JSON,
+                    allowNull: false,
                     defaultValue: [],
                 },
             },
@@ -140,17 +141,16 @@ class Database {
                 sequelize: this.sequelize,
                 modelName: 'User',
                 tableName: 'users',
-                timestamps: false, 
+                timestamps: false,
                 indexes: [
                     {
                         unique: true,
                         fields: ['discordUserId', 'guildId'],
                     },
-                ]
+                ],
             }
         );
 
-        // Define the GuildSettings model
         this.GuildSettings = GuildSettings.init(
             {
                 id: {
@@ -158,7 +158,8 @@ class Database {
                     primaryKey: true,
                 },
                 settings: {
-                    type: DataTypes.JSONB,
+                    type: DataTypes.JSONB || DataTypes.JSON,
+                    allowNull: false,
                     defaultValue: {},
                 },
             },
@@ -171,16 +172,27 @@ class Database {
         );
     }
 
+    public async ensureGuildExists(guildId: string) {
+        try {
+            const existingGuild = await this.GuildSettings.findOne({ where: { id: guildId } });
+            if (!existingGuild) {
+                Logger.warn(`[DB] Guild config missing for ID: ${guildId}. Creating default config.`);
+                await this.addGuild(guildId);
+                Logger.info(`[DB] Guild config created for ID: ${guildId}`);
+            }
+        } catch (error) {
+            Logger.error(`[DB] Failed to ensure guild exists (${guildId}): ${error}`);
+        }
+    }
+
     public async connect() {
         try {
             await this.sequelize.authenticate();
             Logger.info('Connected to the database');
-
-            // Ensure all models are created, including the guild_settings table
-            await this.sequelize.sync({ force: false }); // This will create the table if it does not exist
+            await this.sequelize.sync({ force: false });
             Logger.info('Tables synchronized successfully');
         } catch (error) {
-            Logger.error(`Unable to connect to the database: ${error}`);
+            Logger.error(`Database connection error: ${error}`);
         }
     }
 
@@ -198,86 +210,101 @@ class Database {
         try {
             const existingUser = await this.getUserByDiscordIdAndGuildId(user.discordUserId, user.guildId);
             if (!existingUser) {
-                return await this.User.create(user);
+                const newUser = await this.User.create(user);
+                Logger.info(`[DB] Added user ${user.discordUserId} to guild ${user.guildId}`);
+                return newUser;
             } else {
-                Logger.info(`User with discordUserId ${user.discordUserId} already exists in guild ${user.guildId}`);
-                return existingUser; // Optionally, return the existing user
+                Logger.info(`User ${user.discordUserId} already exists in guild ${user.guildId}`);
+                return existingUser;
             }
         } catch (error) {
-            Logger.error(`Error adding user to the database: ${error}`);
+            Logger.error(`Error adding user: ${error}`);
+            throw error;
         }
     }
 
     public async ensureUserExists(discordUserId: string, guildId: string, member: GuildMember) {
         const existingUser = await this.getUserByDiscordIdAndGuildId(discordUserId, guildId);
-        
-        if (!existingUser) {
-            // Find a valid TextChannel
-            const channel = member.guild.channels.cache.find(ch => ch instanceof TextChannel && ch.viewable);
-    
-            // Declare lastMessage properly
-            let lastMessage: Message | null = null;
-    
-            if (channel && channel instanceof TextChannel) {
-                // Fetch all messages from the channel
-                const messages = await channel.messages.fetch({ limit: 100 });
-    
-                // Filter messages to find the one sent by the specific user
-                lastMessage = messages.filter(msg => msg.author.id === member.id).first() ?? null;
-            }
-    
-            // Check if the member has the "member" role
-            const verifiedStatus = member.roles.cache.some(role => role.name.toLowerCase() === 'member');
-    
-            // Define the userData object with the required attributes
-            const userData: UserAttributes = {
-                discordUserId: member.id,
-                guildId,
-                username: member.user.username,
-                JoinedAt: member.joinedAt?.toISOString() ?? '',
-                verifiedStatus, // Set the verified status based on whether they have the "member" role
-                verificationDate: null,
-                lastActive: lastMessage
-                    ? new Date(lastMessage.createdAt).toISOString()
-                    : member.joinedAt?.toISOString() ?? new Date().toISOString(),
-                roles: member.roles.cache.map((role) => role.name),
-                warnings: 0,
-                bans: 0,
-                lastAction: null,
-                notes: '',
-                ticketIds: [],
-                discordCreation: member.user.createdAt.toISOString(),
-            };
-    
-            // Insert the new user into the database
-            await this.addUserToDatabase(userData);
+        if (existingUser) return;
+
+        // Find a viewable text channel to check last message
+        const channel = member.guild.channels.cache.find(
+            ch => ch instanceof TextChannel && ch.viewable
+        ) as TextChannel | undefined;
+
+        let lastMessage: Message | null = null;
+
+        if (channel) {
+            const messages = await channel.messages.fetch({ limit: 100 });
+            lastMessage = messages.find(msg => msg.author.id === member.id) ?? null;
+        }
+
+        const verifiedStatus = member.roles.cache.some(
+            role => role.name.toLowerCase() === 'member'
+        );
+
+        const userData: UserAttributes = {
+            discordUserId: member.id,
+            guildId,
+            username: member.user.username,
+            discordCreation: member.user.createdAt.toISOString(),
+            JoinedAt: member.joinedAt?.toISOString() ?? new Date().toISOString(),
+            verifiedStatus,
+            verificationDate: null,
+            lastActive: lastMessage?.createdAt.toISOString() ?? member.joinedAt?.toISOString() ?? new Date().toISOString(),
+            roles: member.roles.cache.map(role => role.name),
+            warnings: 0,
+            bans: 0,
+            lastAction: null,
+            notes: '',
+            ticketIds: [],
+        };
+
+        await this.addUserToDatabase(userData);
+    }
+
+    public async updateUserStatus(discordUserId: string, guildId: string, newStatus: Partial<UserAttributes>) {
+        try {
+            const result = await this.User.update(newStatus, {
+                where: { discordUserId, guildId },
+            });
+            Logger.info(`[DB] Updated user status for ${discordUserId} in guild ${guildId}`);
+            return result;
+        } catch (error) {
+            Logger.error(`Failed to update user status: ${error}`);
+            throw error;
         }
     }
 
-    async updateUserStatus(discordUserId: string, guildId: string, newStatus: Partial<UserAttributes>) {
-        return await this.User.update(newStatus, {
-            where: { discordUserId, guildId },
-        });
-    }
-    
-    // Fetch all users
-    async getAllUsers() {
+    public async getAllUsers() {
         return await this.User.findAll();
     }
-    
-    // Add a new guild to the database
-    async addGuild(guildId: string) {
-        return await this.GuildSettings.create({
-            id: guildId,
-            settings: {}, // Initialize with default settings (empty object)
-        });
+
+    public async addGuild(guildId: string) {
+        try {
+            const newGuild = await this.GuildSettings.create({
+                id: guildId,
+                settings: {},
+            });
+            Logger.info(`[DB] Guild config created for ID: ${guildId}`);
+            return newGuild;
+        } catch (error) {
+            Logger.error(`[DB] Failed to create guild config for ID: ${guildId}: ${error}`);
+            throw error;
+        }
     }
-    
-    // Remove a guild from the database
-    async removeGuild(guildId: string) {
-        return await this.GuildSettings.destroy({
-            where: { id: guildId },
-        });
+
+    public async removeGuild(guildId: string) {
+        try {
+            const deletedCount = await this.GuildSettings.destroy({
+                where: { id: guildId },
+            });
+            Logger.info(`[DB] Removed guild config for ID: ${guildId}`);
+            return deletedCount;
+        } catch (error) {
+            Logger.error(`[DB] Failed to remove guild config for ID: ${guildId}: ${error}`);
+            throw error;
+        }
     }
 }
 

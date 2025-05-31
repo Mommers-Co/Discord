@@ -1,5 +1,5 @@
 import CustomClient from './customClient';
-import { GatewayIntentBits, ActivityType, Collection, Client, GuildMember, PartialGuildMember, Partials } from 'discord.js';
+import { GatewayIntentBits, ActivityType, Collection, GuildMember, PartialGuildMember, Partials } from 'discord.js';
 import fs from 'fs';
 import Logger from './logger';
 import Database from './database';
@@ -7,141 +7,147 @@ import UserService from './userService';
 import { GuildSettings } from './types';
 import { handleNewMemberJoin, handleMemberLeave } from './auth';
 
-// Load the configuration (with guild settings from config.json)
+// Load config with all guilds' settings
 const config = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
 
-// Instance of the Discord client
+// Create instance of CustomClient
 const client = new CustomClient({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers],
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+    ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
-// Add a guildSettings cache to the client (this should work now, since we extended CustomClient)
-client.guildSettings = new Collection<string, any>(); // Using 'any' to hold dynamic guild settings
+// Properly type guildSettings cache
+client.guildSettings = new Collection<string, GuildSettings>();
 
-// When the client is ready (logged in)
+// On client ready
 client.once('ready', async () => {
+    Logger.setClient(client);
+    console.log('Loaded Discord config guild IDs:', Object.keys(config.discord.guilds));
+    Logger.info(`Known guild IDs in config: ${Object.keys(config.discord.guilds).join(', ')}`);
+
+    Logger.setGuildLogChannels(client.guildSettings);
+
     Logger.info(`Logged in as ${client.user?.tag}`);
 
     try {
-        // Connect to the database
-        Logger.info('Attempting to connect to the database...');
+        Logger.info('Connecting to the database...');
         await Database.connect();
         Logger.info('Database connection established.');
 
-        // Load guild settings from config.json and set them in the cache
         Logger.info('Loading guild settings from config...');
-        for (const guildId in config.discord) {
-            const guildConfig = config.discord[guildId];
-
-            // Only add guilds that have settings defined in config.json
-            if (guildConfig.guildId) {
-                client.guildSettings.set(guildId, guildConfig);
-                Logger.info(`Guild settings loaded into cache for guild ID: ${guildId}`);
+        for (const key in config.discord.guilds) {
+            const settings = config.discord.guilds[key];
+            if (settings.guildId) {
+                client.guildSettings.set(settings.guildId, settings);
+                Logger.info(`Loaded settings for guild: ${settings.guildName || settings.guildId}`);
             } else {
-                Logger.warn(`Guild config for key "${guildId}" is missing a guildId.`);
+                Logger.warn(`Guild config entry "${key}" is missing guildId.`);
             }
         }
 
-        Logger.info(`Successfully loaded settings for ${client.guildSettings.size} guild(s).`);
+        Logger.info(`Loaded settings for ${client.guildSettings.size} guild(s).`);
 
-        // Log the loaded guild settings for debugging
-        client.guildSettings.forEach((guildConfig, guildId) => {
-            Logger.info(`Config for guild ${guildId}: ${JSON.stringify(guildConfig, null, 2)}`);
+        client.guildSettings.forEach((cfg, id) => {
+            Logger.info(`Guild ${id} config: ${JSON.stringify(cfg, null, 2)}`);
         });
 
-        // Fetch all guilds and their members, and ensure users are added to the database
-        Logger.info('Fetching all connected guilds...');
+        Logger.info('Fetching connected guilds...');
         const guildsFetched = await client.guilds.fetch();
-
-        Logger.info(`Fetched ${guildsFetched.size} guild(s) from Discord.`);
 
         for (const oauthGuild of guildsFetched.values()) {
             try {
-                Logger.info(`Fetching full guild object for: ${oauthGuild.name} (${oauthGuild.id})`);
                 const guild = await client.guilds.fetch(oauthGuild.id);
-
-                Logger.info(`Fetching members for guild: ${guild.name}`);
                 const members = await guild.members.fetch();
                 Logger.info(`Fetched ${members.size} members for guild: ${guild.name}`);
 
                 for (const member of members.values()) {
                     try {
-                        Logger.info(`Ensuring user exists in DB: ${member.user.tag} (${member.id})`);
                         await UserService.ensureUserExists(client, member);
-                        Logger.info(`User confirmed/added: ${member.user.tag} (${member.id})`);
-                    } catch (error) {
-                        Logger.error(`Error ensuring user ${member.id} exists in DB : ${error}`);
+                        Logger.info(`Synced user: ${member.user.tag}`);
+                    } catch (userErr) {
+                        Logger.error(`User DB sync failed for ${member.user.tag}: ${userErr}`);
                     }
                 }
-            } catch (error) {
-                Logger.error(`Error fetching full guild for ${oauthGuild.name} (${oauthGuild.id}): ${error}`);
+            } catch (guildErr) {
+                Logger.error(`Failed to fetch members for guild ${oauthGuild.name} (${oauthGuild.id}): ${guildErr}`);
             }
         }
 
-        // Update presence for each guild dynamically
-        Logger.info('Updating bot presence...');
-        updatePresence(client);
-        Logger.info('Presence update complete.');
-
-    } catch (error: unknown) {
-        if (error instanceof Error) {
-            Logger.error(`Error while connecting to the database or loading guild settings: ${error.message}`);
-        } else {
-            Logger.error(`Unknown error while loading guild settings: ${error}`);
-        }
+        Logger.info('Starting presence rotation...');
+        rotatePresence(client);
+    } catch (startupErr) {
+        Logger.error(`Startup error: ${startupErr instanceof Error ? startupErr.message : startupErr}`);
     }
 });
 
-// Function to update the bot's presence with the number of non-bot members
-const updatePresence = (client: CustomClient) => {
-    // Iterate over each guild the bot is a part of
-    client.guilds.cache.forEach((guild) => {
-        // Get the number of non-bot members for this guild
-        const memberCount = guild.members.cache.filter((member) => !member.user.bot).size;
+// Rotates bot presence message every 60 seconds
+const rotatePresence = async (client: CustomClient) => {
+    const guilds = client.guilds.cache.map(g => g);
+    let current = 0;
 
-        // Retrieve the guild settings from config.json
-        const guildConfig = client.guildSettings.get(guild.id);
+    const update = async () => {
+        if (!guilds.length) return;
 
-        // If guild settings exist in config.json, dynamically update the bot's presence for this guild
-        if (guildConfig) {
-            const guildName = guildConfig.guildId || guild.name;
+        const guild = guilds[current];
+        current = (current + 1) % guilds.length;
 
-            // Set the presence for the bot (e.g., Watching 48 Members in Mommers Co)
-            client.user?.setPresence({
+        try {
+            const members = await guild.members.fetch();
+            const memberCount = members.filter(m => !m.user.bot).size;
+            const settings = client.guildSettings.get(guild.id);
+            const guildName = settings?.guildName || guild.name;
+
+            await client.user?.setPresence({
                 activities: [{
-                    name: `Watching ${memberCount} Members in ${guildName}`,
-                    type: ActivityType.Watching, // Use ActivityType.Watching here
+                    name: `${memberCount} Members in ${guildName}`,
+                    type: ActivityType.Watching,
                 }],
-                status: 'online', // You can customize this to 'dnd' (Do Not Disturb), 'idle', etc.
+                status: 'online',
             });
 
-            Logger.info(`Set presence for ${guildName}: Watching ${memberCount} Members.`);
+            Logger.info(`Presence updated: Watching ${memberCount} Members in ${guildName}`);
+        } catch (presenceErr) {
+            Logger.warn(`Presence update failed for guild ${guild.name}: ${presenceErr}`);
         }
-    });
+    };
+
+    await update();
+    setInterval(update, 60000);
 };
 
+// Member join handler
 client.on('guildMemberAdd', async (member: GuildMember | PartialGuildMember) => {
-    if (member instanceof GuildMember) {
-        await handleNewMemberJoin(client, member);
-    } else {
-        // Fetch the full GuildMember if it's a PartialGuildMember
-        const fullMember = await member.guild.members.fetch(member.id);
+    try {
+        const fullMember = member instanceof GuildMember ? member : await member.guild.members.fetch(member.id);
         await handleNewMemberJoin(client, fullMember);
+    } catch (err) {
+        Logger.error(`Error handling guildMemberAdd: ${err}`);
     }
 });
 
+// Member leave handler
 client.on('guildMemberRemove', async (member: GuildMember | PartialGuildMember) => {
-    if (member instanceof GuildMember) {
-        await handleMemberLeave(client, member);
-    } else {
-        // Fetch the full GuildMember if it's a PartialGuildMember
-        const fullMember = await member.guild.members.fetch(member.id);
-        await handleMemberLeave(client, fullMember);
+    try {
+        // Fetch full member for leave handler (since it expects GuildMember)
+        // If member.guild is undefined (rare edge case), handle gracefully
+        if ('guild' in member && member.guild) {
+            const fullMember = member instanceof GuildMember ? member : await member.guild.members.fetch(member.id);
+            await handleMemberLeave(client, fullMember);
+        } else {
+            Logger.warn('guildMemberRemove event received a member without guild, skipping leave handler.');
+        }
+    } catch (err) {
+        Logger.error(`Error handling guildMemberRemove: ${err}`);
     }
 });
 
-// Log in using the bot token from the config
+// Bot login
 client.login(config.discord.botToken).catch((err) => {
-    Logger.error(`Failed to log in: ${err.message}`);
+    Logger.error(`Bot login failed: ${err.message}`);
 });
