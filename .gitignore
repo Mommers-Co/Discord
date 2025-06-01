@@ -3,6 +3,13 @@
 
 # Dependency directories
 node_modules/
+backups
 
 #config
 config.json
+lastSentPost.json
+latestconfig.json
+mco_testing.json
+
+# Database
+database.sql
