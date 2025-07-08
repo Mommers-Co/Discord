@@ -98,14 +98,5 @@ mco-discord-suite/
 | Auth          | Discord OAuth2                      |
 | Infrastructure| Docker + Docker Compose             |
 
----
-
-## 🔧 Setup Instructions
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/mommersco/mco-discord-suite.git
-cd mco-discord-suite
 
 
