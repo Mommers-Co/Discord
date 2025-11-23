@@ -67,6 +67,13 @@ class Database {
                 host: config.database.host,
                 dialect: config.database.type as any,
                 logging: (sql, timing) => Logger.database(`${sql}${timing ? ` (${timing} ms)` : ''}`),
+
+                dialectOptions: {
+                    ssl: {
+                        require: true,
+                        rejectedUnauthorized: false
+                    }
+                }
             }
         );
 
