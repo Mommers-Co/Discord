@@ -104,30 +104,41 @@ export async function handleNewMemberJoin(client: Client, member: GuildMember) {
         Logger.info(`Started verification collector for ${member.user.tag}`);
 
         collector.on('collect', async (interaction) => {
-        if (interaction.customId === 'verify_button' && interaction.user.id === member.id) {
+    // 🔍 DEBUG: Log EVERY click to see if the bot is listening
+    Logger.info(`DEBUG: Click received! ID: ${interaction.customId} | User: ${interaction.user.id}`);
+
+    if (interaction.customId === 'verify_button') {
         try {
-            await interaction.deferUpdate();
+            // 1. Acknowledge IMMEDIATELY (This stops the "Interaction Failed" error)
+            await interaction.deferUpdate(); 
+            Logger.info('DEBUG: Interaction deferred successfully.');
 
-            const verifiedRole = member.guild.roles.cache.get(verifiedRoleId);
-
-            if (!verifiedRole) {
-            Logger.warn(`Verified role not found in guild ${member.guild.name}`);
-            await interaction.followUp({ content: 'Verification role is missing. Please contact an admin.', ephemeral: true });
-            return;
+            // 2. Validate User (Safety Check)
+            if (interaction.user.id !== member.id) {
+                Logger.warn(`DEBUG: ID Mismatch! Clicker: ${interaction.user.id} vs Member: ${member.id}`);
+                await interaction.followUp({ content: "❌ You cannot verify for someone else.", ephemeral: true });
+                return;
             }
 
-            await member.roles.add(verifiedRole);
-            Logger.info(`Assigned verified role to ${member.user.tag}`);
+            const verifiedRole = member.guild.roles.cache.get(verifiedRoleId);
+            if (!verifiedRole) {
+                Logger.warn(`Verified role not found in guild ${member.guild.name}`);
+                await interaction.followUp({ content: 'Verification role is missing. Contact admin.', ephemeral: true });
+                return;
+            }
 
+            // 3. Perform the slow work
+            await member.roles.add(verifiedRole);
             await Database.updateUserStatus(member.id, member.guild.id, {
                 verifiedStatus: true,
                 verificationDate: new Date().toISOString(),
             });
 
+            // 4. Update the message
             await interaction.editReply({
-            content: `✅ You're verified! Welcome to **${member.guild.name}**.`,
-            embeds: [],
-            components: [],
+                content: `✅ You're verified! Welcome to **${member.guild.name}**.`,
+                embeds: [],
+                components: [],
             });
 
             const entranceChannel = member.guild.channels.cache.get(guildConfig.channels.EntranceChannelId);
@@ -142,7 +153,10 @@ export async function handleNewMemberJoin(client: Client, member: GuildMember) {
 
             collector.stop('verified');
         } catch (err) {
-            Logger.error(`Verification error for ${member.user.tag}: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
+            Logger.error(`Verification Error: ${err}`);
+            if (interaction.deferred) {
+                await interaction.followUp({ content: "❌ Something went wrong during verification.", ephemeral: true });
+            }
         }
         }
         });
