@@ -106,10 +106,13 @@ export async function handleNewMemberJoin(client: Client, member: GuildMember) {
         collector.on('collect', async (interaction) => {
         if (interaction.customId === 'verify_button' && interaction.user.id === member.id) {
         try {
+            await interaction.deferUpdate();
+
             const verifiedRole = member.guild.roles.cache.get(verifiedRoleId);
+
             if (!verifiedRole) {
             Logger.warn(`Verified role not found in guild ${member.guild.name}`);
-            await interaction.reply({ content: 'Verification role is missing. Please contact an admin.', ephemeral: true });
+            await interaction.followUp({ content: 'Verification role is missing. Please contact an admin.', ephemeral: true });
             return;
             }
 
@@ -117,11 +120,11 @@ export async function handleNewMemberJoin(client: Client, member: GuildMember) {
             Logger.info(`Assigned verified role to ${member.user.tag}`);
 
             await Database.updateUserStatus(member.id, member.guild.id, {
-            verifiedStatus: true,
-            verificationDate: new Date().toISOString(),
+                verifiedStatus: true,
+                verificationDate: new Date().toISOString(),
             });
 
-            await interaction.update({
+            await interaction.editReply({
             content: `✅ You're verified! Welcome to **${member.guild.name}**.`,
             embeds: [],
             components: [],
