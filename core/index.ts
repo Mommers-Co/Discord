@@ -18,8 +18,16 @@ const client = new CustomClient({
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.DirectMessageReactions,
     ],
-    partials: [Partials.Message, Partials.Channel, Partials.Reaction],
+    partials: [
+        Partials.Message, 
+        Partials.Channel, 
+        Partials.Reaction,
+        Partials.User,
+        Partials.GuildMember
+    ],
 });
 
 // Properly type guildSettings cache
