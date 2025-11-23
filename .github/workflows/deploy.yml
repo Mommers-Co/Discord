@@ -3,7 +3,7 @@ name: Deploy to Google Cloud VM
 on:
   push:
     branches:
-      - main  # Runs whenever code is pushed to the 'main' branch
+      - production  # Runs whenever code is pushed to the 'production' branch
 
 jobs:
   deploy:
