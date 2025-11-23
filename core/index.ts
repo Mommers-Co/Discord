@@ -152,6 +152,23 @@ client.on('guildMemberRemove', async (member: GuildMember | PartialGuildMember) 
     }
 });
 
+/*
+// DEBUG
+client.on('interactionCreate', async (interaction) => {
+    Logger.info(`[GLOBAL DEBUG] 🚨 Interaction detected! Type: ${interaction.type}`);
+    
+    if (interaction.isButton()) {
+        Logger.info(`[GLOBAL DEBUG] 🔘 Button clicked: "${interaction.customId}" by ${interaction.user.tag}`);
+        Logger.info(`[GLOBAL DEBUG] 📍 Channel Type: ${interaction.channel?.type} (DM=1)`);
+        
+        // Attempt to verify if we can reply to it
+        if (interaction.customId === 'verify_button') {
+             Logger.info(`[GLOBAL DEBUG] ✅ This is the verify button!`);
+        }
+    }
+});
+*/
+
 // Bot login
 client.login(config.discord.botToken).catch((err) => {
     Logger.error(`Bot login failed: ${err.message}`);
